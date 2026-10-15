@@ -173,6 +173,7 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     file_name = "file"
     is_code = False
     is_zip = False
+    is_apk = False
 
     if msg.photo:
         tg_file = msg.photo[-1]
@@ -212,6 +213,9 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             kind = f"ملف PDF ({file_name})"
         elif mime.startswith("video/"):
             kind = f"فيديو ({file_name})"
+        elif ext == ".apk" or "vnd.android.package-archive" in mime:
+            kind = f"تطبيق أندرويد APK ({file_name})"
+            is_apk = True
         elif ext == ".zip":
             kind = f"مشروع مضغوط ZIP ({file_name})"
             is_zip = True
@@ -231,7 +235,13 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         file_obj = await tg_file.get_file()
         data = bytes(await file_obj.download_as_bytearray())
 
-        if is_zip:
+        if is_apk:
+            from tools import apk_inspector
+            ts_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+            dest = config.BASE_DIR / "repos_cache" / f"upload_{ts_str}_{file_name}"
+            dest.write_bytes(data)
+            content = await apk_inspector._handle_inspect_apk({"apk_path": str(dest)})
+        elif is_zip:
             import zipfile
             ts_str = datetime.now().strftime("%Y%m%d_%H%M%S")
             safe_name = Path(file_name).stem
@@ -701,6 +711,105 @@ async def leads_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     await send_long(update, res)
 
 
+async def tunnel_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/tunnel [start/stop/status] [port] — manages Cloudflare HTTPS public tunnel."""
+    args = context.args or []
+    sub = args[0].lower() if args else "start"
+    from tools import cloud_tunnel
+    if sub in ("stop", "close"):
+        res = cloud_tunnel.stop_public_tunnel()
+        await update.effective_message.reply_text(f"🛑 {res['message']}")
+    elif sub in ("status", "check"):
+        st = cloud_tunnel.get_tunnel_status()
+        if st["status"] == "active":
+            await update.effective_message.reply_text(f"🌐 **النفق السحابي نشط:**\n{st['public_url']}\nالمحلي: http://localhost:{st['local_port']}")
+        else:
+            await update.effective_message.reply_text("⚪ لا يوجد نفق سحابي نشط حالياً.")
+    else:
+        port = int(args[1]) if len(args) > 1 and args[1].isdigit() else (int(args[0]) if args and args[0].isdigit() else 8000)
+        await update.effective_message.reply_text(f"🌐 جاري فتح نفق سحابي مشفر للبورت `{port}` (Cloudflare Tunnel)... انتظر ثوانٍ معدودة ⏳")
+        try:
+            res = await cloud_tunnel.start_public_tunnel(port=port)
+            await update.effective_message.reply_text(
+                f"✅ **تم فتح النفق السحابي بنجاح!**\n\n"
+                f"🔗 **الرابط العام المباشر:**\n{res['public_url']}\n\n"
+                f"💡 **رابط المعاينة المباشر للزبائن:**\n`{res['public_url']}/p/slug-name`\n\n"
+                f"يمكنك إرسال هذا الرابط للزبائن على الواتساب فوراً!"
+            )
+        except Exception as e:
+            await update.effective_message.reply_text(f"❌ خطأ أثناء فتح النفق: {e}")
+
+
+async def proposal_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/proposal <client> | <project> | <price> — generates instant 1-page PDF proposal."""
+    raw = " ".join(context.args or []).strip()
+    if not raw:
+        await update.effective_message.reply_text(
+            "📄 **مولد العروض الفنية والمالية (PDF):**\n\n"
+            "الاستخدام:\n`/proposal اسم العميل | عنوان المشروع | السعر والمدة`\n\n"
+            "مثال:\n`/proposal مطعم التاج | نظام نقاط البيع شامل POS | 500 شيكل - تسليم خلال 48 ساعة`"
+        )
+        return
+    parts = [p.strip() for p in raw.split("|")]
+    client = parts[0]
+    proj = parts[1] if len(parts) > 1 else "نظام أتمتة وإدارة الأعمال"
+    price = parts[2] if len(parts) > 2 else "$450 USD"
+
+    await update.effective_message.reply_text("📄 جاري تصميم ورندرة ملف العرض التنفيذي (PDF)... ⏳")
+    from tools import proposal_pdf_builder
+    try:
+        pdf_path = await proposal_pdf_builder.generate_proposal_pdf(
+            client_name=client,
+            project_title=proj,
+            problem_statement="الاعتماد على الدفاتر الورقية أو أنظمة بطيئة تضيع الوقت والأرباح.",
+            proposed_solution="نظام هندسي متكامل سريع يعمل أوفلاين مع فواتير الواتساب وإدارة كاملة للمخزون.",
+            deliverables=[
+                "برنامج مفعل مدى الحياة ويعمل بدون كهرباء أو إنترنت",
+                "قاعدة بيانات سريعة ومحمية مع نسخ احتياطي تلقائي",
+                "طباعة الفواتير الحرارية وإرسال تقارير الإقفال للواتساب",
+                "تدريب الطاقم وضمان ودعم فني مستمر"
+            ],
+            pricing=price,
+            timeline="3 إلى 5 أيام عمل"
+        )
+        if pdf_path.exists():
+            with open(pdf_path, "rb") as pf:
+                await update.effective_message.reply_document(
+                    document=pf,
+                    filename=f"Proposal_{client}.pdf",
+                    caption=f"📄 **عرض فني ومالي تنفيذي جاهز للعميل:** {client}\n📌 جاهز للإرسال على الواتساب أو منصات العمل الحر!"
+                )
+    except Exception as e:
+        await update.effective_message.reply_text(f"❌ خطأ أثناء توليد ملف الـ PDF: {e}")
+
+
+async def carousel_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/carousel <topic> — generates multi-slide square album for Instagram/LinkedIn."""
+    topic = " ".join(context.args or []).strip() or "نصائح تقنية في إدارة الأعمال"
+    await update.effective_message.reply_text(f"🎨 جاري تصميم ألبوم الكاروسيل (1080x1080) لموضوع: *{topic}*... ⏳")
+    from tools import carousel_builder
+    from telegram import InputMediaPhoto
+    try:
+        res = await carousel_builder.generate_carousel(
+            title=topic,
+            slides_data=[
+                {"title": f"دليلك إلى: <span>{topic}</span>", "content": "أهم المبادئ التي يحتاجها كل صاحب عمل ومبرمج في 2026."},
+                {"title": "1. <span>الأتمتة والسرعة</span>", "points": ["توفير الوقت المهدور", "تقليل الاعتماد على الورق", "تقارير مالية حية"]},
+                {"title": "2. <span>الاستقرار والاستمرارية</span>", "points": ["العمل حتى بدون كهرباء", "قاعدة بيانات محلية آمنة", "دعم فني سريع"]},
+                {"title": "الخلاصة <span>والخطوة التالية</span>", "content": "ابدأ اليوم وحول عملك لنظام رقمي ذكي مع شامل POS!"}
+            ]
+        )
+        media_group = []
+        for s_path in res["slides"][:6]:
+            with open(s_path, "rb") as f:
+                media_group.append(InputMediaPhoto(media=f.read()))
+        if media_group:
+            media_group[0].caption = res["caption"]
+            await update.effective_message.reply_media_group(media=media_group)
+    except Exception as e:
+        await update.effective_message.reply_text(f"❌ خطأ أثناء توليد الكاروسيل: {e}")
+
+
 def main() -> None:
     init_db()
 
@@ -740,6 +849,9 @@ def main() -> None:
     app.add_handler(CommandHandler("radar", radar_command, filters=owner))
     app.add_handler(CommandHandler("hunt", hunt_command, filters=owner))
     app.add_handler(CommandHandler("gigs", hunt_command, filters=owner))
+    app.add_handler(CommandHandler("tunnel", tunnel_command, filters=owner))
+    app.add_handler(CommandHandler("proposal", proposal_command, filters=owner))
+    app.add_handler(CommandHandler("carousel", carousel_command, filters=owner))
 
     app.add_handler(CommandHandler("reminders", reminders.list_command, filters=owner))
     app.add_handler(CommandHandler("jobs", jobs.jobs_command, filters=owner))

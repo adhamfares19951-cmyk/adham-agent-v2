@@ -20,6 +20,11 @@ crash_dumps/
 screenshots/
 audio_output/
 videos/
+proposals/
+carousels/
+apk_analysis/
+bin/
+downloads/
 repos_cache/
 packed_projects/
 
