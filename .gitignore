@@ -1,0 +1,30 @@
+# Secrets & Environment
+.env
+credentials.json
+token.json
+sessions/
+*.db
+*.sqlite3
+
+# Python Runtime & Packages (Self-contained in initial server zip)
+python_runtime/
+venv/
+wheels/
+python-3.13.16-amd64.exe
+__pycache__/
+*.pyc
+
+# Logs, Dumps, and Media Outputs
+watchdog.log
+crash_dumps/
+screenshots/
+audio_output/
+videos/
+repos_cache/
+packed_projects/
+
+# Temporary & Archive files
+*.rar
+*.zip
+*.bak*
+get-pip.py
