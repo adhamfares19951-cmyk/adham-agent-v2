@@ -5,11 +5,12 @@ import logging
 
 from tools import (
     agency_tools, apk_inspector, brief, browser_pilot, calendar_tools, carousel_builder, cloud_tunnel,
-    codync_manager, crew_orchestrator, document_vision, experience_tools, facebook_saved, gaza_shops,
-    github_engine, gmail_tools, insights, jobs, lead_pipeline_bridge, media_studio, memory_tools,
-    network_tools, outreach, project_concat, proposal_pdf_builder, reminders, self_evolution, server_ops,
-    session_manager, skills_engine, social_gig_hunter, social_reach, tech_radar, video_assembler,
-    voice_studio, web_reader, web_search, whatsapp_bridge, workspace_coder, youtube_tools,
+    code_auditor, codync_manager, crew_orchestrator, document_vision, experience_tools, facebook_saved,
+    finance_tracker, gaza_shops, github_engine, gmail_tools, insights, jobs, lead_pipeline_bridge,
+    license_generator, live_lead_scraper, media_studio, memory_tools, mikrotik_manager, network_tools,
+    outreach, project_concat, proposal_pdf_builder, reminders, self_evolution, server_ops, session_manager,
+    skills_engine, social_gig_hunter, social_reach, tech_radar, video_assembler, voice_studio, web_reader,
+    web_search, whatsapp_bridge, workspace_coder, youtube_tools,
 )
 
 log = logging.getLogger("tools")
@@ -20,7 +21,8 @@ _MODULES = [
     project_concat, server_ops, self_evolution, video_assembler, voice_studio, gaza_shops, memory_tools, reminders,
     jobs, brief, experience_tools, insights, outreach, gmail_tools, calendar_tools, youtube_tools, social_reach,
     media_studio, lead_pipeline_bridge, document_vision, codync_manager, cloud_tunnel, proposal_pdf_builder,
-    carousel_builder, apk_inspector,
+    carousel_builder, apk_inspector, live_lead_scraper, mikrotik_manager, license_generator, finance_tracker,
+    code_auditor,
 ]
 _TOOLS = {t["name"]: t for m in _MODULES for t in m.TOOLS}
 

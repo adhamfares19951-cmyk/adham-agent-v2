@@ -810,6 +810,78 @@ async def carousel_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         await update.effective_message.reply_text(f"❌ خطأ أثناء توليد الكاروسيل: {e}")
 
 
+async def scrape_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/scrape <query> [city] — live places and business lead scraper."""
+    args = context.args or []
+    if not args:
+        await update.effective_message.reply_text("اكتب النشاط والمدينة، مثلاً:\n`/scrape مطاعم خانيونس` أو `/scrape صيدليات الرياض`")
+        return
+    q = args[0]
+    city = args[1] if len(args) > 1 else "خانيونس"
+    await update.effective_message.reply_text(f"🎯 جاري رصد واستخراج محلات *{q}* في مدينة *{city}* فوراً... ⏳")
+    from tools import live_lead_scraper
+    res = await live_lead_scraper._handle_scrape({"query": q, "city": city, "limit": 6})
+    await send_long(update, res)
+
+
+async def license_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/license <merchant> <device_id> — generates offline cryptographic license for Shamel POS."""
+    args = context.args or []
+    if len(args) < 2:
+        await update.effective_message.reply_text("اكتب اسم المتجر ومعرف الجهاز، مثلاً:\n`/license سوبرماركت_التاج ANDROID-98A72B`")
+        return
+    merchant = args[0].replace("_", " ")
+    device_id = args[1]
+    from tools import license_generator
+    res = await license_generator._handle_generate_license({"merchant_name": merchant, "device_id": device_id, "is_lifetime": True})
+    await send_long(update, res)
+
+
+async def cash_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/cash [income/expense] [amount] [currency] [desc] — financial tracker & balance."""
+    args = context.args or []
+    from tools import finance_tracker
+    if not args:
+        res = await finance_tracker._handle_summary({})
+        await update.effective_message.reply_text(res)
+        return
+    sub = args[0].lower()
+    if sub in ("balance", "summary", "تقرير"):
+        res = await finance_tracker._handle_summary({})
+        await update.effective_message.reply_text(res)
+        return
+    sign = args[0]
+    tx_type = "income" if ("+" in sign or sign in ("income", "إيراد", "قبض")) else "expense"
+    clean_amt = "".join(c for c in sign if c.isdigit() or c == ".").strip()
+    amt = float(clean_amt) if clean_amt else (float(args[1]) if len(args) > 1 and args[1].replace(".", "").isdigit() else 0.0)
+    curr = "ILS"
+    for a in args[1:3]:
+        if a.upper() in ("USD", "ILS", "JOD", "EUR", "شيكل", "دولار", "دينار"):
+            curr = a
+            break
+    desc = " ".join(args[2:]) if len(args) > 2 else "معاملة مالية"
+    res = await finance_tracker._handle_log_tx({"type": tx_type, "amount": amt, "currency": curr, "description": desc})
+    await update.effective_message.reply_text(res)
+
+
+async def mikrotik_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/mikrotik [hardening/failover/backup] — RouterOS engineering commands and configs."""
+    args = context.args or []
+    act = args[0].lower() if args else "hardening"
+    from tools import mikrotik_manager
+    res = await mikrotik_manager._handle_mikrotik({"action": act, "host": args[1] if len(args) > 1 else ""})
+    await send_long(update, res)
+
+
+async def audit_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/audit [target_path] — static security and secret leak audit."""
+    target = " ".join(context.args or []).strip() or "."
+    await update.effective_message.reply_text(f"🛡️ جاري الفحص الأمني السريع للمسار `{target}`... ⏳")
+    from tools import code_auditor
+    res = await code_auditor._handle_audit({"target": target})
+    await send_long(update, res)
+
+
 def main() -> None:
     init_db()
 
@@ -852,6 +924,12 @@ def main() -> None:
     app.add_handler(CommandHandler("tunnel", tunnel_command, filters=owner))
     app.add_handler(CommandHandler("proposal", proposal_command, filters=owner))
     app.add_handler(CommandHandler("carousel", carousel_command, filters=owner))
+    app.add_handler(CommandHandler("scrape", scrape_command, filters=owner))
+    app.add_handler(CommandHandler("license", license_command, filters=owner))
+    app.add_handler(CommandHandler("cash", cash_command, filters=owner))
+    app.add_handler(CommandHandler("balance", cash_command, filters=owner))
+    app.add_handler(CommandHandler("mikrotik", mikrotik_command, filters=owner))
+    app.add_handler(CommandHandler("audit", audit_command, filters=owner))
 
     app.add_handler(CommandHandler("reminders", reminders.list_command, filters=owner))
     app.add_handler(CommandHandler("jobs", jobs.jobs_command, filters=owner))
