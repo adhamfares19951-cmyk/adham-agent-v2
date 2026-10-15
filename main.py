@@ -882,6 +882,77 @@ async def audit_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     await send_long(update, res)
 
 
+async def gmaps_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/gmaps <keyword> [city] [country] — Google Maps scraper kit & lead qualification."""
+    args = context.args or []
+    if not args:
+        await update.effective_message.reply_text(
+            "🗺️ **Google Maps Scraper Kit (استخراج العملاء المؤهلين):**\n\n"
+            "الاستخدام:\n`/gmaps النشاط [المدينة] [الدولة]`\n\n"
+            "أمثلة:\n"
+            "• `/gmaps مطاعم خانيونس فلسطين`\n"
+            "• `/gmaps كافيهات الرياض السعودية`\n"
+            "• `/gmaps صيدليات دبي الإمارات`"
+        )
+        return
+    kw = args[0]
+    city = args[1] if len(args) > 1 else "خانيونس"
+    country = args[2] if len(args) > 2 else "فلسطين"
+    await update.effective_message.reply_text(f"🗺️ جاري تشغيل Google Maps Lead Scraper لاستخراج عملاء *{kw}* في *{city}*... انتظر ثوانٍ معدودة ⏳")
+    from tools import gmaps_lead_kit
+    res = await gmaps_lead_kit.extract_gmaps_leads_kit(keyword=kw, city=city, country=country, limit=6)
+    csv_path = Path(res["csv_path"])
+    if csv_path.exists():
+        with open(csv_path, "rb") as cf:
+            await update.effective_message.reply_document(
+                document=cf,
+                filename=csv_path.name,
+                caption=f"📄 **ملف CSV المستخرج ({res['total_extracted']} عميل):**\nتم تسجيلهم تلقائياً في نظام المعاينات!"
+            )
+    out_text = await gmaps_lead_kit._handle_gmaps_kit({"keyword": kw, "city": city, "country": country, "limit": 6})
+    await send_long(update, out_text)
+
+
+async def caption_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/caption [video_path] — burns karaoke animated subtitles onto video."""
+    msg = update.effective_message
+    reply = msg.reply_to_message
+    video_to_process = None
+
+    if reply and (reply.video or reply.video_note or reply.document):
+        tg_doc = reply.video or reply.video_note or reply.document
+        await msg.reply_text("⏳ جاري تنزيل الفيديو المردود عليه لإضافة كابشن الكاراوكي...")
+        f_obj = await tg_doc.get_file()
+        ts = int(time.time())
+        local_video = config.BASE_DIR / "repos_cache" / f"reply_video_{ts}.mp4"
+        await f_obj.download_to_drive(str(local_video))
+        video_to_process = local_video
+    elif context.args:
+        video_to_process = Path(" ".join(context.args).strip())
+
+    if not video_to_process or not video_to_process.exists():
+        await msg.reply_text(
+            "🎬 **توليد كابشن الكاراوكي المتحرك (AutoCaption Pro):**\n\n"
+            "• رد على أي فيديو بكلمة `/caption` ليقوم بتفريغه وحرق الكابشن كلمة بكلمة عليه فوراً!\n"
+            "• أو اكتب: `/caption videos/video_1792057299.mp4`"
+        )
+        return
+
+    await msg.reply_text("🎬 جاري تفريغ الكلمات بدقة الميلي ثانية وحرق كابشن الكاراوكي الأصفر المشع على الفيديو... ⏳")
+    from tools import video_autocaption
+    try:
+        res = await video_autocaption.burn_karaoke_subtitles(video_to_process)
+        out_v = Path(res["video_path"])
+        if out_v.exists():
+            with open(out_v, "rb") as vf:
+                await msg.reply_video(
+                    video=vf,
+                    caption=f"✨ **فيديو الكابشن المتحرك (AutoCaption Pro):**\n• الكلمات المتزامنة: {res['total_words']} كلمة\n• تأثير الكاراوكي: إضاءة الكلمة الحالية باللون الأصفر!"
+                )
+    except Exception as e:
+        await msg.reply_text(f"❌ خطأ أثناء توليد الكابشن: {e}")
+
+
 def main() -> None:
     init_db()
 
@@ -930,6 +1001,8 @@ def main() -> None:
     app.add_handler(CommandHandler("balance", cash_command, filters=owner))
     app.add_handler(CommandHandler("mikrotik", mikrotik_command, filters=owner))
     app.add_handler(CommandHandler("audit", audit_command, filters=owner))
+    app.add_handler(CommandHandler("gmaps", gmaps_command, filters=owner))
+    app.add_handler(CommandHandler("caption", caption_command, filters=owner))
 
     app.add_handler(CommandHandler("reminders", reminders.list_command, filters=owner))
     app.add_handler(CommandHandler("jobs", jobs.jobs_command, filters=owner))
