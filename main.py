@@ -50,6 +50,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "• `/saved [بحث]` — استعراض وبحث عناصرك المحفوظة على فيسبوك (137 عنصراً محفوظاً)\n"
         "• `/voice [نص]` — استوديو التعليق الصوتي العصبي (Neural TTS) بالذكاء الاصطناعي\n"
         "• `/video [عنوان | هوك | نص]` — استوديو إنتاج فيديوهات ريلز وتيك توك وشورتس 9:16 فورياً\n"
+        "• `/image <prompt>` — توليد صور وتصاميم وبوسترات واقعية بمحرك FLUX.1 مجاناً\n"
+        "• `/leads [نشاط] [مدينة]` — جلب العملاء المستخرجين وروابط المعاينة وعروض الواتساب\n"
         "• `/wa [phone]` — أتمتة الواتساب وتجهيز الفواتير وتقارير Z-Report لـ شامل POS\n"
         "• `/browser <url>` — المتصفح الآلي (Browser Pilot) لتصفح المواقع والتقاط صور شاشة\n"
         "• `/crew [crew_id]` — تشغيل طواقم الوكلاء الذكية (مبيعات، كودينج، فريلانس، ومحتوى)\n"
@@ -664,6 +666,41 @@ async def update_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         await update.effective_message.reply_text(res["error"])
 
 
+async def image_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/image <prompt> — generate stunning AI image via Flux.1."""
+    prompt = " ".join(context.args or []).strip()
+    if not prompt:
+        await update.effective_message.reply_text("يرجى كتابة وصف الصورة المطلوبة، مثال:\n`/image cyberpunk robot in dark neon room 9:16`")
+        return
+
+    aspect = "9:16" if "9:16" in prompt or "ريلز" in prompt else ("16:9" if "16:9" in prompt else "1:1")
+    await update.effective_message.reply_text(f"🎨 جاري رسم وتوليد الصورة بمحرك FLUX.1 بأبعاد `{aspect}`...")
+    from tools import media_studio
+    try:
+        res = await media_studio.generate_flux_image(prompt=prompt, aspect_ratio=aspect)
+        img_path = Path(res["image_path"])
+        if img_path.exists():
+            with open(img_path, "rb") as photo:
+                await update.effective_message.reply_photo(
+                    photo=photo,
+                    caption=f"🎨 **الصورة المولدة بالذكاء الاصطناعي (FLUX.1):**\n`{prompt[:120]}`"
+                )
+            return
+    except Exception as e:
+        await update.effective_message.reply_text(f"❌ خطأ أثناء توليد الصورة: {e}")
+
+
+async def leads_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/leads [category] [city] — query extracted business leads and preview links."""
+    args = context.args or []
+    cat = args[0] if len(args) > 0 else ""
+    city = args[1] if len(args) > 1 else ""
+    await update.effective_message.reply_text("🎯 جاري جلب العملاء وروابط المعاينة المخصصة من قاعدة البيانات...")
+    from tools import lead_pipeline_bridge
+    res = await lead_pipeline_bridge.query_leads_handler({"category": cat, "city": city, "limit": 6})
+    await send_long(update, res)
+
+
 def main() -> None:
     init_db()
 
@@ -678,6 +715,8 @@ def main() -> None:
     app.add_handler(CommandHandler("sync", update_cmd, filters=owner))
     app.add_handler(CommandHandler("pip", pip_cmd, filters=owner))
     app.add_handler(CommandHandler("cmd", cmd_cmd, filters=owner))
+    app.add_handler(CommandHandler("image", image_command, filters=owner))
+    app.add_handler(CommandHandler("leads", leads_command, filters=owner))
     app.add_handler(CommandHandler("skills", skills_command, filters=owner))
     app.add_handler(CommandHandler("repo", repo_command, filters=owner))
     app.add_handler(CommandHandler("code", code_command, filters=owner))

@@ -4,10 +4,11 @@ To add a new tool: create a module in this folder and add it to _MODULES below.
 import logging
 
 from tools import (
-    agency_tools, brief, browser_pilot, calendar_tools, crew_orchestrator, experience_tools, facebook_saved, gaza_shops,
-    github_engine, gmail_tools, insights, jobs, memory_tools, network_tools, outreach, project_concat, reminders,
-    self_evolution, server_ops, session_manager, skills_engine, social_gig_hunter, social_reach, tech_radar,
-    video_assembler, voice_studio, web_reader, web_search, whatsapp_bridge, workspace_coder, youtube_tools,
+    agency_tools, brief, browser_pilot, calendar_tools, crew_orchestrator, document_vision, experience_tools,
+    facebook_saved, gaza_shops, github_engine, gmail_tools, insights, jobs, lead_pipeline_bridge, media_studio,
+    memory_tools, network_tools, outreach, project_concat, reminders, self_evolution, server_ops, session_manager,
+    skills_engine, social_gig_hunter, social_reach, tech_radar, video_assembler, voice_studio, web_reader, web_search,
+    whatsapp_bridge, workspace_coder, youtube_tools,
 )
 
 log = logging.getLogger("tools")
@@ -17,6 +18,7 @@ _MODULES = [
     social_gig_hunter, session_manager, facebook_saved, whatsapp_bridge, browser_pilot, crew_orchestrator,
     project_concat, server_ops, self_evolution, video_assembler, voice_studio, gaza_shops, memory_tools, reminders,
     jobs, brief, experience_tools, insights, outreach, gmail_tools, calendar_tools, youtube_tools, social_reach,
+    media_studio, lead_pipeline_bridge, document_vision,
 ]
 _TOOLS = {t["name"]: t for m in _MODULES for t in m.TOOLS}
 
