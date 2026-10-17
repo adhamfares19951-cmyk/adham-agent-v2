@@ -16,10 +16,13 @@ __pycache__/
 
 # Logs, Dumps, and Media Outputs
 watchdog.log
+bot.log
 crash_dumps/
 screenshots/
 audio_output/
-videos/
+videos/*
+!videos/*.jpg
+!videos/*.png
 proposals/
 carousels/
 apk_analysis/

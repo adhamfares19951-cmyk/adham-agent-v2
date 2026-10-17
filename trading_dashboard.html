@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Core Trade AI Terminal</title>
+    <style>
+        body { margin: 0; background-color: #0a0a0c; color: #fff; font-family: 'Courier New', Courier, monospace; overflow: hidden; }
+        .dashboard { display: grid; grid-template-columns: 1fr 300px; gap: 10px; padding: 10px; height: 100vh; }
+        .chart-area { border: 1px solid #333; background: #000; position: relative; }
+        .panel { border: 1px solid #333; background: #111; padding: 15px; }
+        h1 { color: #00ff9d; font-size: 18px; margin-top: 0; }
+        .data-point { color: #00ff9d; font-size: 24px; font-weight: bold; }
+        .indicator { color: #ff0055; }
+    </style>
+</head>
+<body>
+    <div class="dashboard">
+        <div class="chart-area" id="chart">
+            <canvas id="tradingCanvas"></canvas>
+        </div>
+        <div class="panel">
+            <h1>CORE TRADE AI</h1>
+            <p>ASSET: BTC/USD</p>
+            <div class="data-point" id="price">68,420.50</div>
+            <hr>
+            <p class="indicator">LIQUIDITY SWEEP: DETECTED</p>
+            <p>ORDER BLOCK: ACTIVE</p>
+        </div>
+    </div>
+    <script>
+        const canvas = document.getElementById('tradingCanvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = window.innerWidth * 0.7;
+        canvas.height = window.innerHeight;
+        
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.strokeStyle = '#00ff9d';
+            ctx.beginPath();
+            ctx.moveTo(0, canvas.height/2);
+            for(let x=0; x<canvas.width; x+=10) {
+                ctx.lineTo(x, canvas.height/2 + Math.random()*100 - 50);
+            }
+            ctx.stroke();
+            requestAnimationFrame(draw);
+        }
+        draw();
+    </script>
+</body>
+</html>
