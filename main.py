@@ -3,6 +3,9 @@ from __future__ import annotations
 
 import io
 import logging
+import re
+import time
+import traceback
 from datetime import datetime
 from pathlib import Path
 from telegram import Update
@@ -28,6 +31,10 @@ from tools import brief, gaza_shops, gmail_tools, jobs, media, outreach, reminde
 logging.basicConfig(
     format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
     level=logging.INFO,
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler(Path(__file__).resolve().parent / "bot.log", encoding="utf-8"),
+    ],
 )
 logging.getLogger("httpx").setLevel(logging.WARNING)
 log = logging.getLogger("adham-agent")
@@ -287,11 +294,16 @@ async def log_ignored(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
 
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
-    log.error("Unhandled error", exc_info=context.error)
+    err_tb = "".join(traceback.format_exception(None, context.error, context.error.__traceback__)) if context.error else "Unknown error"
+    log.error("Unhandled error:\n%s", err_tb)
     if isinstance(update, Update) and update.effective_user and update.effective_user.id == config.OWNER_ID:
         try:
             if update.effective_message:
-                await update.effective_message.reply_text("صار خطأ بالبوت 😕 جرّب كمان مرة.")
+                short_err = str(context.error) if context.error else "حدث خطأ غير متوقع"
+                await update.effective_message.reply_text(
+                    f"⚠️ **صار خطأ أثناء تنفيذ الأمر:**\n<code>{short_err[:250]}</code>\n\nجرّب كمان مرة أو تفقد السجلات.",
+                    parse_mode="HTML"
+                )
         except Exception:
             pass
 
@@ -953,6 +965,295 @@ async def caption_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await msg.reply_text(f"❌ خطأ أثناء توليد الكابشن: {e}")
 
 
+async def yt_stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/yt_stats — displays YouTube channel stats (subscribers, views, videos)."""
+    msg = update.effective_message
+    from tools import youtube_publisher
+    if not youtube_publisher.is_authenticated():
+        await msg.reply_text(
+            "⚠️ **قناة يوتيوب غير مربوطة بعد!**\n\n"
+            "1. ضع ملف `client_secret.json` داخل مجلد `sessions/`.\n"
+            "2. شغل ملف `setup_youtube.bat` من جهازك لتأكيد الصلاحية في ثانيتين!"
+        )
+        return
+
+    await msg.reply_text("📊 جاري جلب إحصائيات قناتك على يوتيوب مباشرة من Google API...")
+    try:
+        info = await youtube_publisher.get_channel_info()
+        if "error" in info:
+            await msg.reply_text(f"⚠️ {info['error']}")
+            return
+
+        text = (
+            f"📺 **إحصائيات القناة الحية (YouTube Studio):**\n\n"
+            f"• **اسم القناة**: `{info['title']}`\n"
+            f"• **المشتركون**: `{info['subscribers']}` 👥\n"
+            f"• **إجمالي المشاهدات**: `{info['views']}` 👁️\n"
+            f"• **عدد الفيديوهات**: `{info['videos']}` 🎥\n"
+            f"• **المعرّف**: `{info.get('custom_url', '—')}`\n"
+            f"• **معرف القناة**: `{info.get('channel_id')}`\n\n"
+            f"🟢 **حالة الاتصال**: نشط ومتصل بالكامل ويمكن للبوت النشر فوراً!"
+        )
+        await msg.reply_text(text)
+    except Exception as e:
+        await msg.reply_text(f"❌ حدث خطأ أثناء الاتصال باليوتيوب: {e}")
+
+
+async def yt_upload_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/yt_upload [title] | [description] | [privacy] — upload replied video to YouTube."""
+    msg = update.effective_message
+    reply = msg.reply_to_message
+    from tools import youtube_publisher
+
+    if not youtube_publisher.is_authenticated():
+        await msg.reply_text(
+            "⚠️ **قناة يوتيوب غير موثقة بعد!**\n"
+            "يرجى تشغيل `setup_youtube.bat` لربط القناة أولاً."
+        )
+        return
+
+    video_path = None
+    if reply and (reply.video or reply.video_note or reply.document):
+        tg_doc = reply.video or reply.video_note or reply.document
+        await msg.reply_text("⏳ جاري تنزيل الفيديو المردود عليه للرفع إلى يوتيوب...")
+        f_obj = await tg_doc.get_file()
+        ts = int(time.time())
+        local_video = config.BASE_DIR / "repos_cache" / f"yt_upload_{ts}.mp4"
+        await f_obj.download_to_drive(str(local_video))
+        video_path = local_video
+
+    raw_args = " ".join(context.args).strip()
+    parts = [p.strip() for p in raw_args.split("|")]
+
+    title = parts[0] if len(parts) >= 1 and parts[0] else "فيديو جديد عبر أدهم بوت #Shorts"
+    description = parts[1] if len(parts) >= 2 else "تم النشر تلقائياً بواسطة المساعد الذكي أدهم."
+    privacy = parts[2] if len(parts) >= 3 else "public"
+
+    if not video_path:
+        # Check if user specified a file path as first argument
+        if parts[0] and Path(parts[0]).exists():
+            video_path = Path(parts[0])
+            title = parts[1] if len(parts) >= 2 else video_path.stem
+            description = parts[2] if len(parts) >= 3 else ""
+        else:
+            await msg.reply_text(
+                "🎬 **طريقة رفع الفيديوهات إلى يوتيوب:**\n\n"
+                "• **الطريقة 1 (الأسهل)**: رد على أي فيديو في المحادثة بالأمر:\n"
+                "`/yt_upload العنوان | الوصف | public`\n\n"
+                "• **الطريقة 2**: حدد مسار الفيديو:\n"
+                "`/yt_upload videos/video_1792057299.mp4 | عنوان الفيديو | وصف الفيديو`"
+            )
+            return
+
+    await msg.reply_text(f"🚀 جاري رفع الفيديو إلى يوتيوب ({privacy})...\n🎬 العنوان: `{title}`")
+    try:
+        res = await youtube_publisher.upload_video(
+            video_path=video_path,
+            title=title,
+            description=description,
+            privacy_status=privacy
+        )
+        await msg.reply_text(
+            f"🎉 **تم نشر الفيديو بنجاح على يوتيوب!**\n\n"
+            f"🎬 **العنوان**: {res['title']}\n"
+            f"🔗 **رابط المشاهدة**: {res['url']}\n"
+            f"🔒 **الخصوصية**: {res['privacy']}\n"
+            f"📱 **النوع**: {'YouTube Short ⚡' if res['is_short'] else 'فيديو عادي 🎥'}"
+        )
+    except Exception as e:
+        await msg.reply_text(f"❌ فشل رفع الفيديو: {e}")
+
+
+async def publish_short_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/publish_short title | hook | script — autonomous end-to-end shorts studio."""
+    msg = update.effective_message
+    from tools import youtube_publisher, video_assembler, video_autocaption
+
+    try:
+        if not youtube_publisher.is_authenticated():
+            await msg.reply_text(
+                "⚠️ **قناة يوتيوب غير موثقة بعد!**\n"
+                "يرجى وضع ملف `client_secret.json` ثم تشغيل `setup_youtube.bat` لربط قناتك أولاً."
+            )
+            return
+
+        raw_args = " ".join(context.args).strip()
+        parts = [p.strip() for p in raw_args.split("|")]
+        if len(parts) < 3:
+            await msg.reply_text(
+                "⚡ **استوديو الشورتس الذاتي الكامل (صناعة + كابشن كاريوكي + نشر مباشر على يوتيوب):**\n\n"
+                "الاستخدام:\n"
+                "`/publish_short العنوان | الخطاف (Hook) | السكريبت الكامل`\n\n"
+                "مثال:\n"
+                "`/publish_short The Secret of Liquidity Sweeps | Why do banks always hunt your Stop Loss? | Retail traders place stop losses at obvious levels. Institutional algorithms sweep those levels to fill massive orders. At Core Trade AI, we track the smart money footprint. Stop being the liquidity, become the hunter. Subscribe to Core Trade AI.`"
+            )
+            return
+
+        title, hook, script = parts[0], parts[1], parts[2]
+        await msg.reply_text("🎬 **المرحلة 1**: جاري توليد الصوت العصبي وتصميم الشريحة 1080x1920...")
+
+        # Language and voice detection
+        is_english = bool(re.search(r"[a-zA-Z]{4,}", script))
+        voice_key = "en_male_tech" if is_english else "ar_male_egypt"
+        badge = "🔥 Core Trade AI" if is_english else "🔥 حصرياً 2026"
+        cta = "Subscribe to Core Trade AI!" if is_english else "الرابط بالبايو!"
+        points = [p.strip() for p in re.split(r"[.\n]", script) if len(p.strip()) > 5][:4]
+        if not points:
+            points = ["Smart Money Concepts", "Liquidity Tracking", "Algorithmic Precision"]
+
+        res_v = await video_assembler.assemble_short_video(
+            title=title,
+            hook=hook,
+            points=points,
+            script_narration=script,
+            cta=cta,
+            voice_key=voice_key,
+            badge=badge
+        )
+        v_path = Path(res_v["video_path"])
+
+        lang = "en" if is_english else "ar"
+        await msg.reply_text("✨ **المرحلة 2**: جاري تفريغ الصوت بدقة الكلمات وحرق كابشن الكاراوكي النيون...")
+        res_c = await video_autocaption.burn_karaoke_subtitles(v_path, language=lang)
+        final_video = Path(res_c["video_path"])
+
+        await msg.reply_text("🚀 **المرحلة 3**: جاري رفع الـ Short مباشرة إلى قناتك على يوتيوب...")
+        yt_res = await youtube_publisher.upload_video(
+            video_path=final_video,
+            title=f"{title} #Shorts",
+            description=f"{hook}\n\n{script}\n\n#Shorts #Trading #SMC #Forex #CoreTradeAI",
+            privacy_status="public",
+            is_short=True
+        )
+
+        with open(final_video, "rb") as vf:
+            await msg.reply_video(
+                video=vf,
+                caption=(
+                    f"🎉 **تم نشر الشورتس على قناتك بنجاح!**\n\n"
+                    f"📺 **العنوان**: {yt_res['title']}\n"
+                    f"🔗 **الرابط على يوتيوب**: {yt_res['url']}\n"
+                    f"⚡ استغرق الإنتاج والنشر بالكامل أقل من دقيقة واحدة!"
+                )
+            )
+    except Exception as e:
+        log.error("Error in publish_short_command:\n%s", traceback.format_exc())
+        await msg.reply_text(f"❌ حدث خطأ أثناء خط الإنتاج والنشر:\n<code>{e}</code>", parse_mode="HTML")
+
+
+async def autocut_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/autocut [video_path] — trims dead air and silence using video-use heuristics."""
+    msg = update.effective_message
+    reply = msg.reply_to_message
+    from tools import video_director
+
+    video_to_process = None
+    if reply and (reply.video or reply.video_note or reply.document):
+        tg_doc = reply.video or reply.video_note or reply.document
+        await msg.reply_text("⏳ جاري تنزيل الفيديو المردود عليه لقص فترات الصمت...")
+        f_obj = await tg_doc.get_file()
+        ts = int(time.time())
+        local_video = config.BASE_DIR / "repos_cache" / f"autocut_src_{ts}.mp4"
+        await f_obj.download_to_drive(str(local_video))
+        video_to_process = local_video
+    elif context.args:
+        video_to_process = Path(" ".join(context.args).strip())
+
+    if not video_to_process or not video_to_process.exists():
+        await msg.reply_text(
+            "✂️ **محرك القص الذكي وحذف الصمت (video-use Engine):**\n\n"
+            "• رد على أي فيديو بكلمة `/autocut` ليقوم باكتشاف الصمت وحذفه تلقائياً مع تنعيم الصوت 30ms لمنع الفرقعة!\n"
+            "• أو اكتب: `/autocut videos/my_video.mp4`"
+        )
+        return
+
+    await msg.reply_text("✂️ جاري تحليل الصمت والتردد وقص الفراغات بأمان... ⏳")
+    try:
+        res = await video_director.auto_cut_silence(video_to_process)
+        out_v = Path(res["output_path"])
+        if out_v.exists():
+            with open(out_v, "rb") as vf:
+                await msg.reply_video(
+                    video=vf,
+                    caption=(
+                        f"✨ **تم القص والتنعيم الصوتي بنجاح (video-use):**\n"
+                        f"• عدد القصات: {res['cuts_count']}\n"
+                        f"• الوقت المقتطع: {res['trimmed_seconds']}s\n"
+                        f"• المدة: {res['new_duration']}s (بدلاً من {res['original_duration']}s)"
+                    )
+                )
+    except Exception as e:
+        await msg.reply_text(f"❌ خطأ أثناء القص: {e}")
+
+
+async def grade_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/grade [preset] — applies cinematic color grading (neutral_punch, warm_cinematic, cool_tech, subtle)."""
+    msg = update.effective_message
+    reply = msg.reply_to_message
+    from tools import video_director
+
+    video_to_process = None
+    if reply and (reply.video or reply.video_note or reply.document):
+        tg_doc = reply.video or reply.video_note or reply.document
+        await msg.reply_text("⏳ جاري تنزيل الفيديو لتطبيق التلوين السينمائي...")
+        f_obj = await tg_doc.get_file()
+        ts = int(time.time())
+        local_video = config.BASE_DIR / "repos_cache" / f"grade_src_{ts}.mp4"
+        await f_obj.download_to_drive(str(local_video))
+        video_to_process = local_video
+    elif context.args and Path(context.args[0]).exists():
+        video_to_process = Path(context.args[0])
+
+    preset = "neutral_punch"
+    if context.args:
+        for arg in context.args:
+            if arg.lower() in video_director.GRADE_PRESETS:
+                preset = arg.lower()
+                break
+
+    if not video_to_process or not video_to_process.exists():
+        await msg.reply_text(
+            "🎨 **محرك التلوين السينمائي (Color Grading Engine):**\n\n"
+            "• رد على أي فيديو بالأمر: `/grade [preset]`\n"
+            "• الفلاتر المتاحة:\n"
+            "  - `neutral_punch`: تباين ونقاء حاد طبيعي (الأفضل والأكثر توازناً)\n"
+            "  - `warm_cinematic`: دفء هوليوودي وتباين سينمائي عميق\n"
+            "  - `cool_tech`: أزرق تقني بارد ونظيف\n"
+            "  - `subtle`: تنظيف خفيف جداً بدون تغيير الألوان\n\n"
+            "مثال: رد بـ `/grade warm_cinematic`"
+        )
+        return
+
+    await msg.reply_text(f"🎨 جاري تطبيق التلوين السينمائي `{preset}` عبر FFmpeg... ⏳")
+    try:
+        out_v = await video_director.apply_color_grade(video_to_process, preset=preset)
+        if out_v.exists():
+            with open(out_v, "rb") as vf:
+                await msg.reply_video(
+                    video=vf,
+                    caption=f"🎬 **تم التلوين السينمائي بنجاح:**\n• الفلتر: `{preset}`"
+                )
+    except Exception as e:
+        await msg.reply_text(f"❌ خطأ أثناء التلوين: {e}")
+
+
+async def concat_app_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/concat_app — provides download link and features for Concat (free CapCut replacement)."""
+    msg = update.effective_message
+    from tools import video_director
+    info = await video_director.get_concat_app_info()
+    features = "\n".join(f"• {f}" for f in info["features"])
+    text = (
+        f"🎬 **{info['app_name']} ({info['version']})**\n"
+        f" البديل الحقيقي والمجاني 100% لبرنامج CapCut بدون أي اشتراكات أو علامات مائية!\n\n"
+        f"📥 **رابط التنزيل المباشر لويندوز:**\n"
+        f"{info['installer_url']}\n\n"
+        f"✨ **أبرز المميزات:**\n{features}\n\n"
+        f"🔗 **المستودع الرسمي:** {info['official_repo']}"
+    )
+    await msg.reply_text(text)
+
+
 def main() -> None:
     init_db()
 
@@ -1003,6 +1304,12 @@ def main() -> None:
     app.add_handler(CommandHandler("audit", audit_command, filters=owner))
     app.add_handler(CommandHandler("gmaps", gmaps_command, filters=owner))
     app.add_handler(CommandHandler("caption", caption_command, filters=owner))
+    app.add_handler(CommandHandler("yt_stats", yt_stats_command, filters=owner))
+    app.add_handler(CommandHandler("yt_upload", yt_upload_command, filters=owner))
+    app.add_handler(CommandHandler("publish_short", publish_short_command, filters=owner))
+    app.add_handler(CommandHandler("autocut", autocut_command, filters=owner))
+    app.add_handler(CommandHandler("grade", grade_command, filters=owner))
+    app.add_handler(CommandHandler("concat_app", concat_app_command, filters=owner))
 
     app.add_handler(CommandHandler("reminders", reminders.list_command, filters=owner))
     app.add_handler(CommandHandler("jobs", jobs.jobs_command, filters=owner))

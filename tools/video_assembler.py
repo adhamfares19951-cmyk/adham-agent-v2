@@ -16,6 +16,7 @@ import subprocess
 import time
 from pathlib import Path
 from typing import Any
+import re
 
 import imageio_ffmpeg
 from tools import voice_studio
@@ -44,21 +45,32 @@ async def render_html_card(
     badge: str = "🔥 حصرياً 2026",
 ) -> Path:
     """Renders a sleek, vertical 1080x1920 slide card using Playwright or fallback SVG."""
+    is_en = bool(re.search(r"[a-zA-Z]{4,}", title + " " + hook))
+    dir_attr = "ltr" if is_en else "rtl"
+    lang_attr = "en" if is_en else "ar"
+    font_family = "'Outfit', 'Inter', sans-serif" if is_en else "'Cairo', sans-serif"
+
+    brand_html = brand if brand != "Adham Tech | الذكاء الاصطناعي" else ("Core <span>Trade</span> AI" if is_en else "Adham<span>AI</span> • Studio")
+    sub_cta_text = "Subscribe to Core Trade AI • Track Smart Money Algorithmic Footprints" if is_en else "الرابط بالبايو • تابع الحساب لتصلك أحدث أدوات الذكاء الاصطناعي"
+
+    bg_img = VIDEOS_DIR / "terminal_bg.jpg"
+    bg_css = f"background: linear-gradient(rgba(11, 15, 25, 0.85), rgba(3, 7, 18, 0.94)), url('file:///{bg_img.as_posix()}') center/cover no-repeat;" if (bg_img.exists() and is_en) else "background: radial-gradient(circle at 50% 15%, #1e1b4b 0%, #0b0f19 50%, #030712 100%);"
+
     html_content = f"""<!DOCTYPE html>
-<html lang="ar" dir="rtl">
+<html lang="{lang_attr}" dir="{dir_attr}">
 <head>
 <meta charset="UTF-8">
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&family=Outfit:wght@600;800&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&family=Outfit:wght@600;800;900&display=swap');
   
   * {{ box-sizing: border-box; margin: 0; padding: 0; }}
   
   body {{
     width: 1080px;
     height: 1920px;
-    background: radial-gradient(circle at 50% 15%, #1e1b4b 0%, #0b0f19 50%, #030712 100%);
+    {bg_css}
     color: #f8fafc;
-    font-family: 'Cairo', sans-serif;
+    font-family: {font_family};
     display: flex;
     flex-direction: column;
     justify-content: space-between;
@@ -218,7 +230,7 @@ async def render_html_card(
 
   <div class="header">
     <div class="badge">{badge}</div>
-    <div class="brand">Adham<span>AI</span> • Studio</div>
+    <div class="brand">{brand_html}</div>
   </div>
 
   <div class="hero-box">
@@ -243,7 +255,7 @@ async def render_html_card(
 
   <div class="footer-cta">
     <div class="cta-text">🔥 {cta}</div>
-    <div class="cta-sub">الرابط بالبايو • تابع الحساب لتصلك أحدث أدوات الذكاء الاصطناعي</div>
+    <div class="cta-sub">{sub_cta_text}</div>
   </div>
 </body>
 </html>
