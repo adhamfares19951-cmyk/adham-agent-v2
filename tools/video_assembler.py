@@ -294,7 +294,6 @@ async def render_html_card(
 
 def _render_svg_fallback(title: str, hook: str, points: list[str], cta: str, output_png: Path) -> Path:
     """Generates an image via FFmpeg if Playwright is unavailable."""
-    # We create a placeholder image using FFmpeg lavfi color generator
     ffmpeg = _get_ffmpeg_path()
     cmd = [
         ffmpeg, "-y",
@@ -304,6 +303,177 @@ def _render_svg_fallback(title: str, hook: str, points: list[str], cta: str, out
         str(output_png)
     ]
     subprocess.run(cmd, capture_output=True, check=True)
+    return output_png
+
+
+async def render_trading_chart_slide(
+    title: str,
+    hook: str,
+    output_png: Path,
+    badge: str = "⚠️ SMC LIQUIDITY TRAP",
+) -> Path:
+    """Renders an elite 1080x1920 institutional TradingView chart slide with a sleek top hook card."""
+    chart_img = VIDEOS_DIR / "chart_liquidity_sweep.jpg"
+    if not chart_img.exists():
+        chart_img = VIDEOS_DIR / "terminal_bg.jpg"
+
+    # Format hook title with dynamic highlight
+    words = hook.split()
+    if len(words) > 3:
+        highlight_idx = max(len(words) // 2, 2)
+        hook_formatted = " ".join(words[:highlight_idx]) + f" <span>{' '.join(words[highlight_idx:])}</span>"
+    else:
+        hook_formatted = f"<span>{hook}</span>"
+
+    html = f"""<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="UTF-8">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@700;800;900&family=Inter:wght@600;700&display=swap');
+  * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+  body {{
+    width: 1080px;
+    height: 1920px;
+    background: url('file:///{chart_img.as_posix()}') center center / cover no-repeat;
+    position: relative;
+    overflow: hidden;
+    font-family: 'Outfit', sans-serif;
+  }}
+  
+  /* Top Hook Header Card */
+  .top-banner {{
+    position: absolute;
+    top: 70px;
+    left: 40px;
+    right: 40px;
+    background: rgba(10, 15, 29, 0.88);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-top: 3px solid #ef4444;
+    border-radius: 28px;
+    padding: 30px 36px;
+    box-shadow: 0 25px 50px rgba(0, 0, 0, 0.7), 0 0 30px rgba(239, 68, 68, 0.25);
+    z-index: 20;
+  }}
+  .badge-row {{
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 14px;
+  }}
+  .badge {{
+    background: linear-gradient(135deg, #ef4444, #dc2626);
+    color: #ffffff;
+    font-size: 22px;
+    font-weight: 800;
+    padding: 8px 22px;
+    border-radius: 999px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    box-shadow: 0 4px 15px rgba(239, 68, 68, 0.5);
+  }}
+  .channel-pill {{
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #38bdf8;
+    font-size: 24px;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+  }}
+  .hook-title {{
+    color: #ffffff;
+    font-size: 46px;
+    font-weight: 900;
+    line-height: 1.25;
+    letter-spacing: -0.5px;
+    text-shadow: 0 4px 20px rgba(0,0,0,0.8);
+  }}
+  .hook-title span {{
+    color: #facc15;
+    text-shadow: 0 0 25px rgba(250, 204, 21, 0.5);
+  }}
+
+  /* Bottom subtle vignette for subtitles */
+  .bottom-shade {{
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 480px;
+    background: linear-gradient(to top, rgba(3, 7, 18, 0.95) 0%, rgba(3, 7, 18, 0.7) 50%, transparent 100%);
+    pointer-events: none;
+    z-index: 10;
+  }}
+
+  /* Floating Watermark */
+  .watermark {{
+    position: absolute;
+    bottom: 50px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: rgba(15, 23, 42, 0.85);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(56, 189, 248, 0.3);
+    padding: 12px 30px;
+    border-radius: 999px;
+    color: #e2e8f0;
+    font-size: 24px;
+    font-weight: 700;
+    z-index: 15;
+  }}
+  .watermark span {{
+    color: #38bdf8;
+    font-weight: 800;
+  }}
+</style>
+</head>
+<body>
+  <div class="top-banner">
+    <div class="badge-row">
+      <div class="badge">{badge}</div>
+      <div class="channel-pill">⚡ Core Trade AI</div>
+    </div>
+    <div class="hook-title">{hook_formatted}</div>
+  </div>
+  
+  <div class="bottom-shade"></div>
+  
+  <div class="watermark">
+    <span>@CoreTradeAI</span> • Institutional Algo Hub
+  </div>
+</body>
+</html>"""
+
+    temp_html = CACHE_DIR / f"trading_slide_{int(time.time()*1000)}.html"
+    temp_html.write_text(html, encoding="utf-8")
+
+    try:
+        from playwright.async_api import async_playwright
+        async with async_playwright() as p:
+            try:
+                browser = await p.chromium.launch(channel="msedge", headless=True)
+            except Exception:
+                try:
+                    browser = await p.chromium.launch(channel="chrome", headless=True)
+                except Exception:
+                    browser = await p.chromium.launch(headless=True)
+            page = await browser.new_page(viewport={"width": 1080, "height": 1920})
+            await page.goto(f"file:///{temp_html.as_posix()}", wait_until="networkidle")
+            await page.screenshot(path=str(output_png), full_page=False)
+            await browser.close()
+    finally:
+        try:
+            if temp_html.exists():
+                temp_html.unlink()
+        except Exception:
+            pass
+
     return output_png
 
 
@@ -325,22 +495,49 @@ async def assemble_short_video(
     output_png = CACHE_DIR / f"slide_{ts}.png"
     output_mp4 = VIDEOS_DIR / f"video_{ts}.mp4"
 
+    TRADING_KEYWORDS = [
+        "trade", "trading", "forex", "crypto", "smc", "liquidity", "sweep",
+        "stop loss", "order block", "fvg", "gold", "xau", "btc", "smart money", "core trade"
+    ]
+    is_trading = any(k in (title + " " + hook + " " + script_narration).lower() for k in TRADING_KEYWORDS)
+
     # 1. Generate Voiceover via Edge-TTS
     log.info("Generating voiceover for script...")
     audio_path = await voice_studio.generate_speech(text=script_narration, voice_key=voice_key)
     if not audio_path.exists():
         raise RuntimeError(f"Voiceover generation failed: {audio_path}")
 
+    # 1b. Mix Lo-Fi Tech BGM with auto-ducking
+    final_audio = audio_path
+    bgm_audio = VIDEOS_DIR / f"audio_bgm_{ts}.wav"
+    try:
+        from tools import media_studio
+        await media_studio.mix_audio_with_ambient_bgm(audio_path, bgm_audio, bgm_volume=0.13)
+        if bgm_audio.exists():
+            final_audio = bgm_audio
+            log.info("Lo-Fi BGM mixed successfully with voiceover.")
+    except Exception as e:
+        log.warning("BGM mix skipped or failed: %s", e)
+
     # 2. Render 1080x1920 Slide Card
-    log.info("Rendering 1080x1920 visual slide card...")
-    await render_html_card(
-        title=title,
-        hook=hook,
-        points=points,
-        cta=cta,
-        output_png=output_png,
-        badge=badge,
-    )
+    if is_trading:
+        log.info("Trading content detected! Rendering High-Impact Trading Terminal Slide...")
+        await render_trading_chart_slide(
+            title=title,
+            hook=hook,
+            output_png=output_png,
+            badge=badge if badge != "🔥 حصرياً 2026" else "⚠️ SMC LIQUIDITY TRAP"
+        )
+    else:
+        log.info("Rendering 1080x1920 visual slide card...")
+        await render_html_card(
+            title=title,
+            hook=hook,
+            points=points,
+            cta=cta,
+            output_png=output_png,
+            badge=badge,
+        )
 
     # 3. Assemble with FFmpeg (Image + Audio + Zoom Motion)
     ffmpeg = _get_ffmpeg_path()
@@ -351,8 +548,8 @@ async def assemble_short_video(
         ffmpeg, "-y",
         "-loop", "1",
         "-i", str(output_png),
-        "-i", str(audio_path),
-        "-vf", "scale=1080:1920,zoompan=z='min(zoom+0.0006,1.06)':d=750:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1080x1920:fps=30",
+        "-i", str(final_audio),
+        "-vf", "scale=1080:1920,zoompan=z='min(zoom+0.0003,1.06)':d=750:x='iw/2-(iw/zoom/2)':y='ih*0.35-(ih/zoom*0.35)':s=1080x1920:fps=30",
         "-c:v", "libx264",
         "-tune", "stillimage",
         "-c:a", "aac",
