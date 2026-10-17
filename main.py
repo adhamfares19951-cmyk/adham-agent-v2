@@ -1116,6 +1116,143 @@ async def publish_short_command(update: Update, context: ContextTypes.DEFAULT_TY
         await msg.reply_text(f"❌ حدث خطأ أثناء خط الإنتاج والنشر:\n<code>{e}</code>", parse_mode="HTML")
 
 
+async def publish_long_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/publish_long [topic] — builds and publishes a complete 16:9 multi-chapter masterclass to YouTube."""
+    msg = update.effective_message
+    from tools import long_video_studio, youtube_publisher
+
+    topic = " ".join(context.args).strip() or "Smart Money Concepts Complete Masterclass"
+    await msg.reply_text(
+        f"🎬 **جاري إنتاج الماستر كلاس الكامل (16:9 Landscape) لقناتك Core Trade AI!**\n"
+        f"📌 الموضوع: {topic}\n"
+        f"⚡ جاري توليد الفصول، الرندرة الجرافيكية، الصوت العصبي لكل فصل، ودمج الفيديو الكامل..."
+    )
+
+    try:
+        chapters = [
+            {
+                "title": "The Hidden Wall Street Architecture",
+                "subtitle": "Why 95% of retail technical indicators are engineered to fail.",
+                "points": [
+                    "Retail liquidity pools act as fuel for market makers",
+                    "High-frequency algorithms execute stop runs before true expansion",
+                    "Why RSI and MACD give false signals in trending markets",
+                    "The shift from retail trading to institutional order tracking",
+                ],
+                "script": "Welcome to Core Trade AI. If you've been trading financial markets, you've likely felt that the market is watching your stop loss. The truth is: it is. In this masterclass, we uncover how hedge funds and central banks actually engineer liquidity.",
+                "theme_color": "#ef4444",
+            },
+            {
+                "title": "Smart Money Concepts: Order Blocks & Imbalances",
+                "subtitle": "Tracking institutional accumulation zones with mathematical precision.",
+                "points": [
+                    "Identifying the true Order Block before displacement",
+                    "Fair Value Gaps (FVG) and algorithmic rebalancing",
+                    "The difference between high-volume accumulation and noise",
+                    "How to mark pristine institutional entry zones",
+                ],
+                "script": "Institutional players cannot enter positions with a single click. Their orders are so massive they create structural footprints known as Order Blocks and Fair Value Gaps. When displacement occurs, algorithms leave imbalances that act like magnets pulling price back.",
+                "theme_color": "#06b6d4",
+            },
+            {
+                "title": "Liquidity Sweeps & Stop Run Mechanics",
+                "subtitle": "How smart money triggers liquidations above equal highs and lows.",
+                "points": [
+                    "Buy-side vs Sell-side liquidity pools",
+                    "The psychology of double tops and false breakout traps",
+                    "Recognizing the turtle soup and false wick reversal",
+                    "Entering on the re-test of the sweep",
+                ],
+                "script": "Every time retail traders see a clean double top, they place stop losses right above it. To an institutional algorithm, that cluster of stops is free liquidity. The market spikes above the highs, fills massive institutional short orders, and immediately reverses.",
+                "theme_color": "#eab308",
+            },
+            {
+                "title": "Algorithmic Risk Management & Quantitative Edge",
+                "subtitle": "The mathematical formula that separates profitable traders from gamblers.",
+                "points": [
+                    "Asymmetric risk to reward: Minimum 1 to 3 ratio",
+                    "Dynamic position sizing based on true market volatility",
+                    "Eliminating emotional bias through systematic rule sets",
+                    "The compounding power of disciplined execution",
+                ],
+                "script": "Even with a 45% win rate, a quantitative trader with a 1 to 3 risk-to-reward ratio will outperform 99% of discretionary traders. Wealth is built through asymmetric payoff and disciplined position sizing, not by predicting every candle.",
+                "theme_color": "#10b981",
+            },
+            {
+                "title": "The Core Trade AI Advantage",
+                "subtitle": "Automating your edge with algorithmic precision.",
+                "points": [
+                    "Real-time liquidity detection algorithms",
+                    "Automated alerts on high-probability institutional setups",
+                    "Continuous backtesting across multi-asset portfolios",
+                    "Join the future of quantitative smart money trading",
+                ],
+                "script": "At Core Trade AI, our mission is simple: level the playing field by providing retail traders with the same algorithmic intelligence used by proprietary trading desks. Subscribe to our channel, join our community, and start trading with the algorithm.",
+                "theme_color": "#38bdf8",
+            },
+        ]
+
+        res = await long_video_studio.assemble_long_form_video(
+            title=f"{topic} (Full Masterclass)",
+            chapters=chapters,
+        )
+
+        yt_msg = ""
+        if youtube_publisher.is_authenticated():
+            yt_res = await youtube_publisher.upload_video(
+                video_path=Path(res["video_path"]),
+                title=f"{res['title']} | Core Trade AI",
+                description=res["description"],
+                privacy_status="public",
+                is_short=False,
+                tags=["trading", "smc", "forex", "gold", "crypto", "smartmoney", "algo"],
+            )
+            yt_msg = f"\n🚀 **تم نشر الفيديو الطويل مباشرة على يوتيوب!**\n🔗 **الرابط:** {yt_res['url']}"
+
+        await msg.reply_text(
+            f"🎉 **تم الانتهاء من إنتاج الماستر كلاس الطويل!**\n\n"
+            f"📺 **العنوان:** {res['title']}\n"
+            f"⚖️ **الحجم:** {res['file_size_mb']} MB (1080p Widescreen)\n"
+            f"📑 **الفصول (Timestamps):**\n" + "\n".join(res["timestamps"]) +
+            yt_msg
+        )
+    except Exception as e:
+        log.error("Error in publish_long_command:\n%s", traceback.format_exc())
+        await msg.reply_text(f"❌ حدث خطأ أثناء إنتاج الفيديو الطويل:\n<code>{e}</code>", parse_mode="HTML")
+
+
+async def tiktok_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/tiktok [upload video_path | status] — manages TikTok automated publishing."""
+    msg = update.effective_message
+    from tools import tiktok_publisher
+
+    cmd_type = context.args[0] if context.args else "status"
+    if cmd_type == "status":
+        auth = tiktok_publisher.is_authenticated()
+        if auth:
+            await msg.reply_text("✅ **حساب تيك توك موثق وجاهز للنشر التلقائي عبر المتصفح الآلي!**")
+        else:
+            await msg.reply_text(
+                "⚠️ **حساب تيك توك غير مسجل بعد!**\n\n"
+                "لتفعيله بسهولة:\n"
+                "1. افتح مجلد البوت على جهازك.\n"
+                "2. شغّل الملف `setup_tiktok.bat` لمرة واحدة.\n"
+                "3. سجّل دخولك إلى تيك توك ثم أغلق المتصفح لحفظ الجلسة للأبد."
+            )
+    elif cmd_type == "upload":
+        if len(context.args) < 2:
+            await msg.reply_text("الاستخدام: `/tiktok upload videos/my_video.mp4 [الكابشن]`")
+            return
+        v_path = context.args[1]
+        caption = " ".join(context.args[2:]).strip() or "Smart Money Concepts with Core Trade AI #trading #forex #smc"
+        await msg.reply_text("🚀 جاري رفع الفيديو تلقائياً إلى حساب تيك توك عبر المتصفح الآلي...")
+        try:
+            res = await tiktok_publisher.upload_video(video_path=v_path, caption=caption)
+            await msg.reply_text(f"✅ {res['message']}\n📝 الكابشن: {res['caption']}")
+        except Exception as e:
+            await msg.reply_text(f"❌ فشل رفع الفيديو إلى تيك توك: {e}")
+
+
 async def autocut_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """/autocut [video_path] — trims dead air and silence using video-use heuristics."""
     msg = update.effective_message
@@ -1282,6 +1419,9 @@ def main() -> None:
     app.add_handler(CommandHandler("yt_stats", yt_stats_command, filters=owner))
     app.add_handler(CommandHandler("yt_upload", yt_upload_command, filters=owner))
     app.add_handler(CommandHandler("publish_short", publish_short_command, filters=owner))
+    app.add_handler(CommandHandler("publish_long", publish_long_command, filters=owner))
+    app.add_handler(CommandHandler("masterclass", publish_long_command, filters=owner))
+    app.add_handler(CommandHandler("tiktok", tiktok_command, filters=owner))
     app.add_handler(CommandHandler("autocut", autocut_command, filters=owner))
     app.add_handler(CommandHandler("grade", grade_command, filters=owner))
     app.add_handler(CommandHandler("concat_app", concat_app_command, filters=owner))

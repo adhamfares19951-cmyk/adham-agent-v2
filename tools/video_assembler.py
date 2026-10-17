@@ -313,7 +313,38 @@ async def render_trading_chart_slide(
     badge: str = "⚠️ SMC LIQUIDITY TRAP",
 ) -> Path:
     """Renders an elite 1080x1920 institutional TradingView chart slide with a sleek top hook card."""
-    chart_img = VIDEOS_DIR / "chart_liquidity_sweep.jpg"
+    txt = (title + " " + hook + " " + badge).lower()
+    if any(k in txt for k in ["order block", "ob", "accumulation", "btc", "crypto"]):
+        chart_img = VIDEOS_DIR / "chart_order_block.jpg"
+        theme_color = "#06b6d4"  # cyan
+        theme_glow = "rgba(6, 182, 212, 0.45)"
+        theme_grad = "linear-gradient(135deg, #06b6d4, #0284c7)"
+        highlight_color = "#38bdf8"
+        effective_badge = badge if badge != "⚠️ SMC LIQUIDITY TRAP" else "⚡ INSTITUTIONAL ORDER BLOCK"
+    elif any(k in txt for k in ["fvg", "gap", "imbalance", "eur", "fair value"]):
+        chart_img = VIDEOS_DIR / "chart_fvg.jpg"
+        theme_color = "#d946ef"  # magenta
+        theme_glow = "rgba(217, 70, 239, 0.45)"
+        theme_grad = "linear-gradient(135deg, #d946ef, #a855f7)"
+        highlight_color = "#f472b6"
+        effective_badge = badge if badge != "⚠️ SMC LIQUIDITY TRAP" else "🔮 FAIR VALUE GAP (FVG)"
+    elif any(k in txt for k in ["gold", "xau", "equal high", "pool"]):
+        chart_img = VIDEOS_DIR / "chart_gold_trap.jpg"
+        theme_color = "#eab308"  # gold
+        theme_glow = "rgba(234, 179, 8, 0.45)"
+        theme_grad = "linear-gradient(135deg, #eab308, #ca8a04)"
+        highlight_color = "#fef08a"
+        effective_badge = badge if badge != "⚠️ SMC LIQUIDITY TRAP" else "👑 GOLD LIQUIDITY POOL"
+    else:
+        chart_img = VIDEOS_DIR / "chart_liquidity_sweep.jpg"
+        theme_color = "#ef4444"  # crimson
+        theme_glow = "rgba(239, 68, 68, 0.45)"
+        theme_grad = "linear-gradient(135deg, #ef4444, #dc2626)"
+        highlight_color = "#facc15"
+        effective_badge = badge
+
+    if not chart_img.exists():
+        chart_img = VIDEOS_DIR / "chart_liquidity_sweep.jpg"
     if not chart_img.exists():
         chart_img = VIDEOS_DIR / "terminal_bg.jpg"
 
@@ -351,10 +382,10 @@ async def render_trading_chart_slide(
     backdrop-filter: blur(24px);
     -webkit-backdrop-filter: blur(24px);
     border: 1px solid rgba(255, 255, 255, 0.15);
-    border-top: 3px solid #ef4444;
+    border-top: 3px solid {theme_color};
     border-radius: 28px;
     padding: 30px 36px;
-    box-shadow: 0 25px 50px rgba(0, 0, 0, 0.7), 0 0 30px rgba(239, 68, 68, 0.25);
+    box-shadow: 0 25px 50px rgba(0, 0, 0, 0.7), 0 0 30px {theme_glow};
     z-index: 20;
   }}
   .badge-row {{
@@ -364,7 +395,7 @@ async def render_trading_chart_slide(
     margin-bottom: 14px;
   }}
   .badge {{
-    background: linear-gradient(135deg, #ef4444, #dc2626);
+    background: {theme_grad};
     color: #ffffff;
     font-size: 22px;
     font-weight: 800;
@@ -372,7 +403,7 @@ async def render_trading_chart_slide(
     border-radius: 999px;
     letter-spacing: 1px;
     text-transform: uppercase;
-    box-shadow: 0 4px 15px rgba(239, 68, 68, 0.5);
+    box-shadow: 0 4px 15px {theme_glow};
   }}
   .channel-pill {{
     display: flex;
@@ -392,8 +423,8 @@ async def render_trading_chart_slide(
     text-shadow: 0 4px 20px rgba(0,0,0,0.8);
   }}
   .hook-title span {{
-    color: #facc15;
-    text-shadow: 0 0 25px rgba(250, 204, 21, 0.5);
+    color: {highlight_color};
+    text-shadow: 0 0 25px {theme_glow};
   }}
 
   /* Bottom subtle vignette for subtitles */
@@ -436,7 +467,7 @@ async def render_trading_chart_slide(
 <body>
   <div class="top-banner">
     <div class="badge-row">
-      <div class="badge">{badge}</div>
+      <div class="badge">{effective_badge}</div>
       <div class="channel-pill">⚡ Core Trade AI</div>
     </div>
     <div class="hook-title">{hook_formatted}</div>
