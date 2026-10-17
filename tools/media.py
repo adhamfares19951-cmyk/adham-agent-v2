@@ -55,8 +55,9 @@ async def _gemini(data: bytes, mime: str, prompt: str) -> str:
     raise RuntimeError(f"Gemini could not read the file: {last}")
 
 
-async def transcribe(audio: bytes, filename: str = "voice.ogg") -> str:
+async def transcribe(audio: bytes, filename: str = "voice.ogg", **kwargs) -> str:
     """Speech to text (Arabic first)."""
+    filename = kwargs.get("file_name", filename)
     if len(audio) > MAX_BYTES:
         raise MediaError("التسجيل كبير كتير، ابعت تسجيل أقصر 🙏")
     key = config.BACKUP_KEYS.get("Groq", ("", ""))[0]

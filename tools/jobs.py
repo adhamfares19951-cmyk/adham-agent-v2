@@ -44,7 +44,7 @@ WEBSITES = {
 FIRST_RUN_ITEMS = 5      # on a source's first check, only look at its newest few items
 MIN_SCORE = {"job": 60, "freelance": 65, "aid": 50, "course": 65}
 CATEGORIES = tuple(MIN_SCORE)
-EVAL_BATCH = 4
+EVAL_BATCH = 8
 
 _app: Application | None = None
 _lock = asyncio.Lock()
@@ -527,6 +527,7 @@ async def deep_job_hunter(args: dict) -> str:
         lines.append(f"{i}. **{title}**\n   {body}\n   🔗 رابط الإعلان: {url}\n")
 
     lines.append("> 💡 **ملاحظة الأمان الزمني:** تم فحص التواريخ واستبعاد أي وظائف منتهية التقديم أو من السنوات السابقة.")
+    return "\n".join(lines)
 
 
 TOOLS = [

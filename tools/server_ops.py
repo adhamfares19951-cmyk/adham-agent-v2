@@ -38,7 +38,8 @@ def _check_port(host: str, port: int, timeout: float = 1.0) -> bool:
 def get_system_health() -> dict[str, Any]:
     """Retrieves system resource metrics (Disk, Memory, Platform, Uptime)."""
     # Disk usage
-    total_b, used_b, free_b = shutil.disk_usage("E:\\" if os.path.exists("E:\\") else "C:\\")
+    disk_target = str(BASE_DIR.anchor) if BASE_DIR.anchor else ("/" if sys.platform != "win32" else "C:\\")
+    total_b, used_b, free_b = shutil.disk_usage(disk_target)
     disk_total_gb = total_b / (1024 ** 3)
     disk_used_gb = used_b / (1024 ** 3)
     disk_free_gb = free_b / (1024 ** 3)

@@ -658,6 +658,140 @@ async def video_creator_handler(args: dict) -> str:
         return f"❌ فشل إنشاء الفيديو: {e}"
 
 
+async def autonomous_publish_short(
+    topic: str = "",
+    title: str = "",
+    hook: str = "",
+    script: str = "",
+    points: list[str] | None = None,
+    language: str = "en",
+    privacy: str = "public",
+) -> dict[str, Any]:
+    """Generates, subtitles, and publishes an institutional trading YouTube Short end-to-end."""
+    import random
+
+    CURATED_TOPICS = [
+        {
+            "topic": "liquidity sweeps",
+            "title": "The Secret of Liquidity Sweeps",
+            "hook": "Why do banks always hunt your Stop Loss?",
+            "script": "Retail traders place stop losses at obvious levels. Institutional algorithms sweep those levels to fill massive orders. At Core Trade AI, we track the smart money footprint. Stop being the liquidity, become the hunter. Subscribe to Core Trade AI.",
+            "points": ["Smart Money Concepts", "Liquidity Tracking", "Algorithmic Precision"],
+        },
+        {
+            "topic": "order blocks",
+            "title": "Institutional Order Blocks Revealed",
+            "hook": "Where do hedge funds actually enter the market?",
+            "script": "Hedge funds don't chase green candles. They accumulate massive positions inside hidden Order Blocks before the markup phase. Stop guessing reversals on retail indicators. Follow smart money volume. Subscribe to Core Trade AI.",
+            "points": ["Institutional Footprint", "Order Block Zones", "High Probability Entries"],
+        },
+        {
+            "topic": "fair value gaps",
+            "title": "The Power of Fair Value Gaps",
+            "hook": "Why does price always return to Fair Value Gaps?",
+            "script": "When high-frequency algorithms inject sudden momentum, they create price imbalances known as Fair Value Gaps. Price returns like a magnet to rebalance liquidity. Learn to trade with institutional flow. Subscribe to Core Trade AI.",
+            "points": ["Market Imbalances", "Algorithmic Magnets", "Precision Re-entries"],
+        },
+        {
+            "topic": "stop loss hunting",
+            "title": "The 90% Stop Loss Trap",
+            "hook": "Are market makers hunting your Stop Loss?",
+            "script": "Your stop loss is an institutional target. Algorithms engineered by Wall Street trigger retail liquidations before expanding toward true targets. Trade alongside institutional volume, not against it. Subscribe to Core Trade AI.",
+            "points": ["Liquidity Engineering", "Stop Hunt Mechanics", "Smart Money Footprint"],
+        },
+        {
+            "topic": "gold xauusd",
+            "title": "Trading Gold Like Institutions",
+            "hook": "Why does Gold respect Liquidity Pools?",
+            "script": "Gold is the most algorithmic asset in financial markets. It seeks liquidity above equal highs and below equal lows before reversing with speed. Stop chasing breakouts; wait for the sweep. Subscribe to Core Trade AI.",
+            "points": ["XAUUSD Liquidity", "Equal Highs & Lows", "Institutional Timing"],
+        },
+    ]
+
+    t_lower = (topic or "").lower()
+    matched = None
+    for item in CURATED_TOPICS:
+        if any(kw in t_lower for kw in item["topic"].split()):
+            matched = item
+            break
+
+    if not matched:
+        matched = random.choice(CURATED_TOPICS)
+
+    final_title = title or matched["title"]
+    final_hook = hook or matched["hook"]
+    final_script = script or matched["script"]
+    final_points = points or matched["points"]
+
+    is_english = language == "en" or bool(re.search(r"[a-zA-Z]{4,}", final_script))
+    voice_key = "en_male_tech" if is_english else "ar_male_egypt"
+    badge = "🔥 Core Trade AI" if is_english else "🔥 حصرياً 2026"
+    cta = "Subscribe to Core Trade AI!" if is_english else "الرابط بالبايو!"
+
+    # 1. Assemble raw video with TradingView background + voiceover + Lo-Fi music
+    res_v = await assemble_short_video(
+        title=final_title,
+        hook=final_hook,
+        points=final_points,
+        script_narration=final_script,
+        cta=cta,
+        voice_key=voice_key,
+        badge=badge,
+    )
+    v_path = Path(res_v["video_path"])
+
+    # 2. Burn karaoke word-by-word subtitles
+    from tools import video_autocaption, youtube_publisher
+    res_c = await video_autocaption.burn_karaoke_subtitles(v_path, language="en" if is_english else "ar")
+    final_video = Path(res_c["video_path"])
+
+    # 3. Upload to YouTube Channel
+    yt_res = await youtube_publisher.upload_video(
+        video_path=final_video,
+        title=f"{final_title} #Shorts",
+        description=f"{final_hook}\n\n{final_script}\n\n#Shorts #Trading #SMC #Forex #CoreTradeAI #Crypto #Finance",
+        privacy_status=privacy,
+        is_short=True,
+    )
+
+    return {
+        "success": True,
+        "title": yt_res["title"],
+        "youtube_url": yt_res["url"],
+        "video_path": str(final_video),
+        "hook": final_hook,
+        "script": final_script,
+    }
+
+
+async def publish_trading_short_handler(args: dict) -> str:
+    """Agent tool handler for end-to-end creation and YouTube publishing."""
+    topic = args.get("topic", "")
+    title = args.get("title", "")
+    hook = args.get("hook", "")
+    script = args.get("script", "")
+    language = args.get("language", "en")
+
+    try:
+        res = await autonomous_publish_short(
+            topic=topic,
+            title=title,
+            hook=hook,
+            script=script,
+            language=language,
+        )
+        return (
+            f"🎉 **تم إنشاء ورندرة ونشر فيديو الشورتس بنجاح على قناة يوتيوب!**\n\n"
+            f"🎬 **العنوان:** {res['title']}\n"
+            f"🔗 **رابط المشاهدة على يوتيوب:** {res['youtube_url']}\n"
+            f"📁 **مسار الفيديو المولد:** `{res['video_path']}`\n\n"
+            f"⚡ تم تفعيل شارت TradingView حقيقي وموسيقى تقنية لو فاي وكابشن كاريوكي نيون."
+        )
+    except Exception as e:
+        log.exception("Publish trading short tool failed")
+        return f"❌ فشل إنشاء ونشر الشورتس: {e}"
+
+
 TOOLS = [
     {
         "name": "create_viral_short_video",
@@ -689,5 +823,24 @@ TOOLS = [
             "required": ["title", "hook", "script_narration"],
         },
         "handler": video_creator_handler,
-    }
+    },
+    {
+        "name": "create_and_publish_trading_short",
+        "description": (
+            "ينشئ وينشر فيديو شورتس كامل تلقائياً ومباشرة على قناة يوتيوب (Core Trade AI): "
+            "صوت عصبي + شارت TradingView حقيقي 1080x1920 + موسيقى Lo-Fi محيطية + كابشن كاريوكي نيون + رفع فوري إلى يوتيوب. "
+            "يكفي تمرير موضوع الفيديو (topic) أو فكرته وسيتولى كل شيء من الألف إلى الياء."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "topic": {"type": "string", "description": "موضوع الفيديو (مثال: 'Liquidity Sweeps', 'Order Blocks', 'Stop Loss Hunting', 'Fair Value Gaps', 'Gold Trading')"},
+                "title": {"type": "string", "description": "عنوان مخصص اختياري"},
+                "hook": {"type": "string", "description": "خطاف مخصص اختياري"},
+                "script": {"type": "string", "description": "اسكريبت مخصص اختياري"},
+                "language": {"type": "string", "enum": ["en", "ar"], "description": "اللغة (en لقناة Core Trade AI أو ar)"},
+            },
+        },
+        "handler": publish_trading_short_handler,
+    },
 ]

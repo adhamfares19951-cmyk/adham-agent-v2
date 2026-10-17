@@ -160,7 +160,7 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         tg_file = await audio.get_file()
         data = bytes(await tg_file.download_as_bytearray())
         file_name = getattr(audio, "file_name", None) or "voice.ogg"
-        text = await media.transcribe(data, file_name=file_name)
+        text = await media.transcribe(data, filename=file_name)
     except media.MediaError as e:
         await msg.reply_text(e.user_message)
         return
@@ -323,7 +323,7 @@ async def hunt_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     await update.effective_message.reply_text("🎯 الرادار عم بيمسح فيسبوك وتويتر وخمسات ومستقل للفرص الحية، ثواني...")
     try:
         from tools import social_gig_hunter
-        report = await social_gig_hunter.hunt_social_gigs(platform=platform, niche=niche, max_results=7)
+        report = await social_gig_hunter.hunt_social_gigs({"platform": platform, "niche": niche, "max_results": 7})
     except Exception as e:
         log.exception("Social gig hunting failed")
         report = f"صار خطأ أثناء صيد الفرص 😕 ({e})"
@@ -348,7 +348,7 @@ async def gaza_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     area = args[1] if len(args) > 1 else "خانيونس"
     await update.effective_message.reply_text(f"🏪 عم بفتح دليل محلات {area} وفرص أنظمة الكاشير...")
     try:
-        report = await gaza_shops.scan_gaza_shops(sector=sector, area=area, online_search=False)
+        report = await gaza_shops.scan_gaza_shops({"sector": sector, "area": area, "online_search": "false"})
     except Exception as e:
         log.exception("Gaza scan failed")
         report = f"صار خطأ أثناء فحص محلات غزة 😕 ({e})"
@@ -395,7 +395,7 @@ async def read_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     url = args[0].strip()
     await update.effective_message.reply_text("📄 عم بقرأ محتوى الصفحة عبر Jina Reader...")
     from tools import social_reach
-    res = await social_reach.read_with_jina(url=url)
+    res = await social_reach.read_with_jina({"url": url})
     await send_long(update, res)
 
 
@@ -417,7 +417,7 @@ async def skills_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     args = context.args or []
     query = " ".join(args).strip() if args else "programming"
     from tools import skills_engine
-    res = await skills_engine._tool_search_skills(query=query, limit=10)
+    res = await skills_engine._tool_search_skills({"query": query, "limit": 10})
     await send_long(update, res)
 
 
@@ -432,7 +432,7 @@ async def repo_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     url = args[0].strip()
     await update.effective_message.reply_text("📦 عم بنزل المستودع وأفكفكه وأقرأ معماريته...")
     from tools import github_engine
-    res = await github_engine._tool_inspect_github_repo(repo_url=url)
+    res = await github_engine._tool_inspect_github_repo({"repo_url": url})
     await send_long(update, res)
 
 
@@ -442,7 +442,7 @@ async def code_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     action = args[0].strip() if args else "full"
     await update.effective_message.reply_text(f"⚡ عم بنفذ التحديث والاختبارات التلقائية ({action})...")
     from tools import workspace_coder
-    res = await workspace_coder._tool_update_project_autonomously(action=action)
+    res = await workspace_coder._tool_update_project_autonomously({"action": action})
     await send_long(update, res)
 
 
@@ -1065,9 +1065,9 @@ async def yt_upload_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
 
 async def publish_short_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """/publish_short title | hook | script — autonomous end-to-end shorts studio."""
+    """/publish_short [topic or title | hook | script] — autonomous end-to-end shorts studio."""
     msg = update.effective_message
-    from tools import youtube_publisher, video_assembler, video_autocaption
+    from tools import youtube_publisher, video_assembler
 
     try:
         if not youtube_publisher.is_authenticated():
@@ -1079,60 +1079,35 @@ async def publish_short_command(update: Update, context: ContextTypes.DEFAULT_TY
 
         raw_args = " ".join(context.args).strip()
         parts = [p.strip() for p in raw_args.split("|")]
-        if len(parts) < 3:
-            await msg.reply_text(
-                "⚡ **استوديو الشورتس الذاتي الكامل (صناعة + كابشن كاريوكي + نشر مباشر على يوتيوب):**\n\n"
-                "الاستخدام:\n"
-                "`/publish_short العنوان | الخطاف (Hook) | السكريبت الكامل`\n\n"
-                "مثال:\n"
-                "`/publish_short The Secret of Liquidity Sweeps | Why do banks always hunt your Stop Loss? | Retail traders place stop losses at obvious levels. Institutional algorithms sweep those levels to fill massive orders. At Core Trade AI, we track the smart money footprint. Stop being the liquidity, become the hunter. Subscribe to Core Trade AI.`"
-            )
-            return
 
-        title, hook, script = parts[0], parts[1], parts[2]
-        await msg.reply_text("🎬 **المرحلة 1**: جاري توليد الصوت العصبي وتصميم الشريحة 1080x1920...")
+        topic = ""
+        title, hook, script = "", "", ""
+        if len(parts) >= 3:
+            title, hook, script = parts[0], parts[1], parts[2]
+        else:
+            topic = raw_args
 
-        # Language and voice detection
-        is_english = bool(re.search(r"[a-zA-Z]{4,}", script))
-        voice_key = "en_male_tech" if is_english else "ar_male_egypt"
-        badge = "🔥 Core Trade AI" if is_english else "🔥 حصرياً 2026"
-        cta = "Subscribe to Core Trade AI!" if is_english else "الرابط بالبايو!"
-        points = [p.strip() for p in re.split(r"[.\n]", script) if len(p.strip()) > 5][:4]
-        if not points:
-            points = ["Smart Money Concepts", "Liquidity Tracking", "Algorithmic Precision"]
+        await msg.reply_text(
+            "🎬 **استوديو الشورتس الآلي بدأ العمل!**\n"
+            "⚡ جاري توليد الفكرة والشارت المؤسسي والصوت العصبي وحرق الكابشن والرفع المباشر إلى قناتك..."
+        )
 
-        res_v = await video_assembler.assemble_short_video(
+        res = await video_assembler.autonomous_publish_short(
+            topic=topic,
             title=title,
             hook=hook,
-            points=points,
-            script_narration=script,
-            cta=cta,
-            voice_key=voice_key,
-            badge=badge
-        )
-        v_path = Path(res_v["video_path"])
-
-        lang = "en" if is_english else "ar"
-        await msg.reply_text("✨ **المرحلة 2**: جاري تفريغ الصوت بدقة الكلمات وحرق كابشن الكاراوكي النيون...")
-        res_c = await video_autocaption.burn_karaoke_subtitles(v_path, language=lang)
-        final_video = Path(res_c["video_path"])
-
-        await msg.reply_text("🚀 **المرحلة 3**: جاري رفع الـ Short مباشرة إلى قناتك على يوتيوب...")
-        yt_res = await youtube_publisher.upload_video(
-            video_path=final_video,
-            title=f"{title} #Shorts",
-            description=f"{hook}\n\n{script}\n\n#Shorts #Trading #SMC #Forex #CoreTradeAI",
-            privacy_status="public",
-            is_short=True
+            script=script,
+            language="en" if not re.search(r"[\u0600-\u06FF]", raw_args) else "ar",
         )
 
+        final_video = Path(res["video_path"])
         with open(final_video, "rb") as vf:
             await msg.reply_video(
                 video=vf,
                 caption=(
                     f"🎉 **تم نشر الشورتس على قناتك بنجاح!**\n\n"
-                    f"📺 **العنوان**: {yt_res['title']}\n"
-                    f"🔗 **الرابط على يوتيوب**: {yt_res['url']}\n"
+                    f"📺 **العنوان**: {res['title']}\n"
+                    f"🔗 **الرابط على يوتيوب**: {res['youtube_url']}\n"
                     f"⚡ استغرق الإنتاج والنشر بالكامل أقل من دقيقة واحدة!"
                 )
             )

@@ -12,7 +12,7 @@ from typing import Any
 
 log = logging.getLogger("project_concat")
 
-WORKSPACE_ROOT = Path("e:/Users/adham/Desktop/new")
+WORKSPACE_ROOT = Path(__file__).resolve().parent.parent.parent
 PACKED_DIR = Path(__file__).resolve().parent.parent / "packed_projects"
 PACKED_DIR.mkdir(parents=True, exist_ok=True)
 
