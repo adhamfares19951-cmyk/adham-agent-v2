@@ -1360,6 +1360,53 @@ async def publish_long_command(update: Update, context: ContextTypes.DEFAULT_TYP
         await msg.reply_text(f"❌ حدث خطأ أثناء إنتاج الماستركلاس:\n<code>{e}</code>", parse_mode="HTML")
 
 
+async def fruit_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/fruit [character] [topic] — generates viral 9:16 talking fruit / object comedy shorts with Remotion 60FPS."""
+    msg = update.effective_message
+    from tools import motion_studio
+
+    args = context.args or []
+    valid_chars = ["orange", "apple", "avocado", "banana", "lemon", "bitcoin", "coffee"]
+    character = "orange"
+    topic = "مستر برتقال في خطر والخلاط"
+
+    if args:
+        if args[0].lower() in valid_chars:
+            character = args[0].lower()
+            if len(args) > 1:
+                topic = " ".join(args[1:])
+        else:
+            topic = " ".join(args)
+
+    await msg.reply_text(
+        f"🍊 **جاري تشغيل استوديو الفواكه المتكلمة (Talking Character Studio)!**\n\n"
+        f"🎭 **الشخصية:** {character}\n"
+        f"📌 **الموضوع:** {topic}\n"
+        f"✨ **التقنية:** Remotion 60FPS + عيون ترمش وتتحرك + فم يتزامن مع مخارج الحروف + صوت كرتوني مرح\n\n"
+        f"⏳ جاري كتابة السيناريو الكوميدي وتوليد الصوت وتصيير الفيديو..."
+    )
+
+    try:
+        res = await motion_studio.generate_talking_fruit_short(topic=topic, character=character)
+        final_video = Path(res["video_path"])
+
+        with open(final_video, "rb") as vf:
+            await msg.reply_video(
+                video=vf,
+                caption=(
+                    f"🍊 **تم إنتاج فيديو الفاكهة المتكلمة بنجاح!**\n\n"
+                    f"🎭 **الشخصية:** {res['character']}\n"
+                    f"🎬 **القصة:** {res['topic']}\n"
+                    f"📐 **الأبعاد:** 1080x1920 (9:16 TikTok / Reels / Shorts)\n"
+                    f"✨ **عيون ترمش وتتبع + فم يتكلم مع مخارج الصوت + نظارة شمسية وكروت قافزة!**\n"
+                    f"📁 **الحجم:** {res['size_mb']} MB"
+                )
+            )
+    except Exception as e:
+        log.error("Error in fruit_command:\n%s", traceback.format_exc())
+        await msg.reply_text(f"❌ حدث خطأ أثناء إنتاج فيديو الفاكهة المتكلمة:\n<code>{e}</code>", parse_mode="HTML")
+
+
 async def autocut_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """/autocut [video_path] — trims dead air and silence using video-use heuristics."""
     msg = update.effective_message
@@ -1528,6 +1575,8 @@ def main() -> None:
     app.add_handler(CommandHandler("publish_short", publish_short_command, filters=owner))
     app.add_handler(CommandHandler("publish_long", publish_long_command, filters=owner))
     app.add_handler(CommandHandler("masterclass", publish_long_command, filters=owner))
+    app.add_handler(CommandHandler("fruit", fruit_command, filters=owner))
+    app.add_handler(CommandHandler("talking_object", fruit_command, filters=owner))
     app.add_handler(CommandHandler("tiktok", tiktok_command, filters=owner))
     app.add_handler(CommandHandler("autocut", autocut_command, filters=owner))
     app.add_handler(CommandHandler("grade", grade_command, filters=owner))

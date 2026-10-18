@@ -72,6 +72,57 @@ async def generate_motion_masterclass(
     }
 
 
+async def generate_talking_fruit_short(
+    topic: str = "مستر برتقال في خطر",
+    character: str = "orange",
+    voice: str = "ar_fruit_funny",
+) -> dict[str, Any]:
+    """Runs the talking fruit/character short production pipeline."""
+    if not STUDIO_SCRIPT.exists():
+        raise FileNotFoundError(f"Motion Video Studio not found at: {STUDIO_SCRIPT}")
+
+    python_bin = str(PORTABLE_PY) if PORTABLE_PY.exists() else sys.executable
+    cmd = [
+        python_bin,
+        str(STUDIO_SCRIPT),
+        "--mode", "fruit",
+        "--character", character,
+        "--topic", topic,
+        "--voice", voice,
+    ]
+
+    log.info("Launching Talking Fruit Studio: %s", " ".join(cmd))
+    proc = await asyncio.create_subprocess_exec(
+        *cmd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+        cwd=str(STUDIO_DIR),
+    )
+
+    stdout, stderr = await proc.communicate()
+    if proc.returncode != 0:
+        err_msg = stderr.decode("utf-8", errors="replace")
+        log.error("Talking Fruit Studio failed: %s", err_msg)
+        raise RuntimeError(f"فشل إنتاج فيديو الفواكه المتكلمة: {err_msg[:400]}")
+
+    out_dir = STUDIO_DIR / "out"
+    matching = sorted(out_dir.glob(f"talking_{character}_*.mp4"), key=lambda p: p.stat().st_mtime, reverse=True)
+    if not matching:
+        matching = sorted(out_dir.glob("talking_*.mp4"), key=lambda p: p.stat().st_mtime, reverse=True)
+
+    if not matching:
+        raise FileNotFoundError("لم يتم العثور على ملف فيديو الفاكهة في مجلد out.")
+
+    output_video = matching[0]
+    return {
+        "success": True,
+        "video_path": str(output_video),
+        "character": character,
+        "topic": topic,
+        "size_mb": round(output_video.stat().st_size / (1024 * 1024), 2),
+    }
+
+
 async def _handle_motion_masterclass(args: dict[str, Any]) -> str:
     """Agent tool handler for generating 60FPS motion graphics videos."""
     topic = args.get("topic", "أسرار السيولة المؤسساتية وتداول الذهب")
@@ -93,6 +144,27 @@ async def _handle_motion_masterclass(args: dict[str, Any]) -> str:
         return f"❌ خطأ أثناء إنتاج فيديو الموشن جرافيك: {e}"
 
 
+async def _handle_talking_fruit_short(args: dict[str, Any]) -> str:
+    """Agent tool handler for generating talking fruit / object comedy shorts."""
+    topic = args.get("topic", "مستر برتقال في خطر")
+    character = args.get("character", "orange")
+    voice = args.get("voice", "ar_fruit_funny")
+
+    try:
+        res = await generate_talking_fruit_short(topic=topic, character=character, voice=voice)
+        return (
+            f"🍊 **تم إنتاج فيديو الفاكهة المتكلمة (Talking Character) بنجاح!**\n\n"
+            f"🎭 **الشخصية:** {res['character']}\n"
+            f"📌 **الموضوع:** {res['topic']}\n"
+            f"✨ **الميزات:** عيون واقعية ترمش وتتحرك + فم يتزامن مع مخارج الحروف + صوت كرتوني مرح + كروت تيك توك قافزة\n"
+            f"📁 **مسار الملف:** `{res['video_path']}`\n"
+            f"💾 **الحجم:** {res['size_mb']} MB"
+        )
+    except Exception as e:
+        log.exception("Talking fruit short error")
+        return f"❌ خطأ أثناء إنتاج فيديو الفاكهة المتكلمة: {e}"
+
+
 TOOLS = [
     {
         "name": "create_motion_masterclass",
@@ -107,5 +179,23 @@ TOOLS = [
             "required": ["topic"]
         },
         "handler": _handle_motion_masterclass
+    },
+    {
+        "name": "create_talking_fruit_short",
+        "description": "ينتج فيديوهات كوميدية شورتس وتيك توك للفواكه والأشياء المتكلمة (Talking Fruits / Talking Objects) مثل البرتقال، الأفوكادو، التفاح، الموز، الليمون، والبيتكوين المتكلم مع عيون ترمش وتتحرك وفم يتكلم بحركات شفاه واقعية وصوت كرتوني مضحك.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "character": {
+                    "type": "string",
+                    "enum": ["orange", "apple", "avocado", "banana", "lemon", "bitcoin", "coffee"],
+                    "description": "نوع الشخصية أو الفاكهة المتكلمة"
+                },
+                "topic": {"type": "string", "description": "موضوع أو قصة الفيديو الكوميدي"},
+                "voice": {"type": "string", "description": "نمط الصوت (ar_fruit_funny, ar_fruit_cute, ar_fruit_deep, ar_fruit_panicked, en_cartoon)"}
+            },
+            "required": ["character"]
+        },
+        "handler": _handle_talking_fruit_short
     }
 ]
