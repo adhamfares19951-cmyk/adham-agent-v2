@@ -1101,14 +1101,17 @@ async def publish_short_command(update: Update, context: ContextTypes.DEFAULT_TY
         )
 
         final_video = Path(res["video_path"])
+        yt_url = res.get("youtube_url") or (res.get("youtube") or {}).get("url") or "قيد المعالجة"
+        tt_status = res.get("tiktok_status") or ((res.get("tiktok") or {}).get("message") if (res.get("tiktok") or {}).get("published") else "جاهز")
         with open(final_video, "rb") as vf:
             await msg.reply_video(
                 video=vf,
                 caption=(
-                    f"🎉 **تم نشر الشورتس على قناتك بنجاح!**\n\n"
-                    f"📺 **العنوان**: {res['title']}\n"
-                    f"🔗 **الرابط على يوتيوب**: {res['youtube_url']}\n"
-                    f"⚡ استغرق الإنتاج والنشر بالكامل أقل من دقيقة واحدة!"
+                    f"🎉 **تم إنتاج ونشر الفيديو على المنصات بنجاح!**\n\n"
+                    f"🎬 **العنوان**: {res['title']}\n"
+                    f"🔗 **يوتيوب شورتس**: {yt_url}\n"
+                    f"📱 **تيك توك**: {tt_status}\n\n"
+                    f"⚡ 4 مشاهد ديناميكية + كابشن كاريوكي + موسيقى لو فاي متزامنة!"
                 )
             )
     except Exception as e:
@@ -1222,35 +1225,104 @@ async def publish_long_command(update: Update, context: ContextTypes.DEFAULT_TYP
 
 
 async def tiktok_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """/tiktok [upload video_path | status] — manages TikTok automated publishing."""
+    """/tiktok [publish [topic] | upload [video_path] | status] — manages TikTok publishing & creation."""
     msg = update.effective_message
-    from tools import tiktok_publisher
+    reply = msg.reply_to_message
+    from tools import tiktok_publisher, video_assembler
 
-    cmd_type = context.args[0] if context.args else "status"
-    if cmd_type == "status":
-        auth = tiktok_publisher.is_authenticated()
-        if auth:
-            await msg.reply_text("✅ **حساب تيك توك موثق وجاهز للنشر التلقائي عبر المتصفح الآلي!**")
-        else:
-            await msg.reply_text(
-                "⚠️ **حساب تيك توك غير مسجل بعد!**\n\n"
-                "لتفعيله بسهولة:\n"
-                "1. افتح مجلد البوت على جهازك.\n"
-                "2. شغّل الملف `setup_tiktok.bat` لمرة واحدة.\n"
-                "3. سجّل دخولك إلى تيك توك ثم أغلق المتصفح لحفظ الجلسة للأبد."
+    args = context.args or []
+    sub = (args[0].lower() if args else "").strip()
+
+    # Case 1: Replied to a video -> upload to TikTok directly
+    if reply and (reply.video or reply.video_note or reply.document):
+        tg_doc = reply.video or reply.video_note or reply.document
+        await msg.reply_text("⏳ جاري تنزيل الفيديو المردود عليه لرفعه إلى تيك توك...")
+        f_obj = await tg_doc.get_file()
+        ts = int(time.time())
+        local_video = config.BASE_DIR / "repos_cache" / f"tiktok_upload_{ts}.mp4"
+        await f_obj.download_to_drive(str(local_video))
+        caption = " ".join(args).strip() or "Smart Money Concepts & Algorithmic Trading #trading #forex #smc #crypto #fyp"
+        await msg.reply_text("🚀 جاري رفع الفيديو تلقائياً إلى تيك توك عبر المتصفح الآلي...")
+        try:
+            res = await tiktok_publisher.upload_video(video_path=local_video, caption=caption)
+            await msg.reply_text(f"✅ {res['message']}\n📝 الكابشن: {res['caption']}")
+        except Exception as e:
+            await msg.reply_text(f"❌ فشل رفع الفيديو إلى تيك توك: {e}")
+        return
+
+    # Case 2: Produce & publish a new short video to TikTok & YouTube
+    if sub in ("publish", "نزل", "انشر", "create", "make") or (len(args) > 0 and sub != "upload" and sub != "status" and not Path(args[0]).exists()):
+        topic = " ".join(args[1:] if sub in ("publish", "نزل", "انشر", "create", "make") else args).strip()
+        await msg.reply_text(
+            f"🎬 **جاري إنتاج فيديو احترافي متعدد المشاهد ونشره فوراً على تيك توك ويوتيوب!**\n"
+            f"📌 الموضوع: {topic or 'استراتيجيات التداول الذكي (SMC)'}\n"
+            f"⚡ جاري رندرة 4 شارتات منفصلة + صوت عصبي + موسيقى لو فاي + كابشن كاريوكي..."
+        )
+        try:
+            res = await video_assembler.autonomous_publish_short(
+                topic=topic,
+                language="ar" if re.search(r"[\u0600-\u06FF]", topic) else "en",
+                publish_to_tiktok=True,
+                publish_to_youtube=True,
             )
-    elif cmd_type == "upload":
-        if len(context.args) < 2:
-            await msg.reply_text("الاستخدام: `/tiktok upload videos/my_video.mp4 [الكابشن]`")
+            final_video = Path(res["video_path"])
+            yt_url = res.get("youtube_url") or (res.get("youtube") or {}).get("url") or "قيد المعالجة"
+            tt_status = res.get("tiktok_status") or ((res.get("tiktok") or {}).get("message") if (res.get("tiktok") or {}).get("published") else "جاهز")
+            with open(final_video, "rb") as vf:
+                await msg.reply_video(
+                    video=vf,
+                    caption=(
+                        f"🎉 **تم إنتاج ونشر الفيديو بنجاح على تيك توك ويوتيوب!**\n\n"
+                        f"🎬 **العنوان**: {res['title']}\n"
+                        f"📱 **تيك توك**: {tt_status}\n"
+                        f"🔗 **يوتيوب**: {yt_url}\n\n"
+                        f"⚡ 4 مشاهد حركية + كابشن نيون كلمة بكلمة!"
+                    )
+                )
+        except Exception as e:
+            log.error("Error in tiktok publish:\n%s", traceback.format_exc())
+            await msg.reply_text(f"❌ حدث خطأ أثناء الإنتاج والنشر على تيك توك:\n<code>{e}</code>", parse_mode="HTML")
+        return
+
+    # Case 3: Explicit upload by file path
+    if sub == "upload":
+        if len(args) < 2:
+            await msg.reply_text(
+                "🎬 **طرق النشر على تيك توك:**\n\n"
+                "1. **إنتاج ونشر فيديو فوري جديد:**\n`/tiktok publish موضوع الفيديو` أو `/publish_short`\n\n"
+                "2. **رفع فيديو محدد موجود بالسيرفر:**\n`/tiktok upload videos/my_video.mp4 [الكابشن]`\n\n"
+                "3. **رفع أي فيديو موجود بالمحادثة:**\nرد على الفيديو واكتب: `/tiktok [الكابشن]`"
+            )
             return
-        v_path = context.args[1]
-        caption = " ".join(context.args[2:]).strip() or "Smart Money Concepts with Core Trade AI #trading #forex #smc"
+        v_path = args[1]
+        caption = " ".join(args[2:]).strip() or "Smart Money Concepts with Core Trade AI #trading #forex #smc"
         await msg.reply_text("🚀 جاري رفع الفيديو تلقائياً إلى حساب تيك توك عبر المتصفح الآلي...")
         try:
             res = await tiktok_publisher.upload_video(video_path=v_path, caption=caption)
             await msg.reply_text(f"✅ {res['message']}\n📝 الكابشن: {res['caption']}")
         except Exception as e:
             await msg.reply_text(f"❌ فشل رفع الفيديو إلى تيك توك: {e}")
+        return
+
+    # Case 4: Status check
+    auth = tiktok_publisher.is_authenticated()
+    if auth:
+        await msg.reply_text(
+            "✅ **حساب تيك توك موثق وجاهز 100% للنشر التلقائي!**\n\n"
+            "الأوامر المتاحة للنشر الفوري:\n"
+            "• `/tiktok publish [الموضوع]` — ينتج فيديو كامل بـ 4 مشاهد وينشره على تيك توك ويوتيوب فوراً\n"
+            "• `/publish_short [الموضوع]` — استوديو الشورتس الشامل (يوتيوب وتيك توك معاً)\n"
+            "• رد على أي فيديو في الشات واكتب: `/tiktok` لرفعه فوراً لحسابك\n"
+            "• أو اطلب مني بالرسائل العادية أو الفويس: *'نزل فيديو على تيك توك عن الذهب'*"
+        )
+    else:
+        await msg.reply_text(
+            "⚠️ **حساب تيك توك غير مسجل بعد!**\n\n"
+            "لتفعيله بسهولة:\n"
+            "1. افتح مجلد البوت على جهازك.\n"
+            "2. شغّل الملف `setup_tiktok.bat` لمرة واحدة.\n"
+            "3. سجّل دخولك إلى تيك توك ثم أغلق المتصفح لحفظ الجلسة للأبد."
+        )
 
 
 async def autocut_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

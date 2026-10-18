@@ -40,10 +40,14 @@ async def _fetch_live_mostaql_projects() -> list[dict]:
         return []
 
 
-async def scan_freelance_leads(args: dict) -> str:
+async def scan_freelance_leads(args: dict | None = None, category: str = "all", keyword: str = "") -> str:
     """Scans freelance sites (Mostaql, Khamsat, Kafiil, Upwork) for projects needing custom software, bug fixes, or IT help."""
-    category = (args.get("category") or "all").lower().strip()
-    keyword = (args.get("keyword") or "").strip()
+    if isinstance(args, dict):
+        category = (args.get("category") or category).lower().strip()
+        keyword = (args.get("keyword") or keyword).strip()
+    else:
+        category = (category or "all").lower().strip()
+        keyword = (keyword or "").strip()
 
     from ddgs import DDGS
 

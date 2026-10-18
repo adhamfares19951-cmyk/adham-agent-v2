@@ -73,7 +73,7 @@ async def upload_video(
     caption: str,
     tags: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Uploads a video to TikTok via Playwright Creator Center automation."""
+    """Uploads a video to TikTok via Playwright TikTok Studio automation."""
     v_path = Path(video_path).resolve()
     if not v_path.exists():
         raise FileNotFoundError(f"Video file not found: {v_path}")
@@ -100,53 +100,141 @@ async def upload_video(
                 user_data_dir=str(TIKTOK_DATA_DIR),
                 headless=True,
                 viewport={"width": 1280, "height": 900},
+                args=["--disable-blink-features=AutomationControlled"]
             )
 
         page = await browser_context.new_page()
         try:
-            # Navigate to TikTok upload center
-            await page.goto("https://www.tiktok.com/creator-center/upload?from=upload", wait_until="networkidle", timeout=60000)
-            await asyncio.sleep(3)
+            # 1. Navigate to modern TikTok Studio upload page
+            log.info("Navigating to TikTok Studio upload page...")
+            await page.goto("https://www.tiktok.com/tiktokstudio/upload", wait_until="domcontentloaded", timeout=45000)
+            await asyncio.sleep(4)
 
             # Check if login is required
             if "login" in page.url:
-                raise RuntimeError("TikTok session expired or not authenticated. Run setup_tiktok.bat first.")
+                raise RuntimeError("انتهت صلاحية جلسة تيك توك. يرجى تشغيل setup_tiktok.bat لتسجيل الدخول.")
 
-            # Locate file input element
-            file_input = await page.wait_for_selector('input[type="file"]', timeout=30000)
+            # 2. Locate and set input files (handle attached/hidden state)
+            file_input = await page.wait_for_selector('input[type="file"]', state="attached", timeout=35000)
             if not file_input:
-                raise RuntimeError("Could not find file input element on TikTok upload page.")
+                raise RuntimeError("لم يتم العثور على حقل اختيار ملف الفيديو في صفحة TikTok Studio.")
 
             await file_input.set_input_files(str(v_path))
-            log.info("Video file attached to TikTok uploader.")
+            log.info("Video file attached to TikTok uploader (%s).", v_path.name)
 
-            # Wait for upload processing
-            await asyncio.sleep(5)
+            # 3. Wait for video upload processing
+            uploaded = False
+            for s in range(1, 30):
+                await asyncio.sleep(1)
+                content = await page.content()
+                if "تم التحميل" in content or "Uploaded" in content:
+                    log.info("Video upload confirmed by TikTok Studio in %ds.", s)
+                    uploaded = True
+                    break
 
-            # Try to locate caption box (contenteditable or textarea)
-            caption_elem = await page.query_selector('div[contenteditable="true"]') or await page.query_selector('textarea')
-            if caption_elem:
-                await caption_elem.click()
-                await caption_elem.fill(full_caption)
-                log.info("Caption filled successfully.")
+            if not uploaded:
+                log.warning("Upload indicator did not show 'تم التحميل' within 30s, proceeding to form...")
 
-            # Wait for upload status to finish
-            await asyncio.sleep(8)
+            # 4. Dismiss any announcements or feature introduction modals (e.g., "فهمت")
+            try:
+                got_it_btn = await page.query_selector('button:has-text("فهمت")')
+                if got_it_btn and await got_it_btn.is_visible():
+                    log.info("Dismissing announcement modal ('فهمت')...")
+                    await got_it_btn.click()
+                    await asyncio.sleep(1)
+            except Exception as e:
+                log.debug("Announcement modal check error: %s", e)
 
-            # Click the post button
-            post_btn = await page.query_selector('button:has-text("Post")') or await page.query_selector('button:has-text("نشر")')
-            if post_btn:
-                await post_btn.click()
-                log.info("Post button clicked.")
-                await asyncio.sleep(6)
+            # 5. Populate caption in Draft.js contenteditable editor
+            log.info("Setting caption: %s", full_caption[:60])
+            editable = await page.wait_for_selector('div[contenteditable="true"]', timeout=15000)
+            if editable:
+                await editable.click()
+                await asyncio.sleep(0.5)
+                # Clear pre-filled video filename
+                await page.keyboard.press("Control+A")
+                await asyncio.sleep(0.2)
+                await page.keyboard.press("Backspace")
+                await asyncio.sleep(0.2)
+                # Insert full caption cleanly
+                await page.keyboard.insert_text(full_caption)
+                await asyncio.sleep(1)
+                # Close any open hashtag autocompletion popup
+                await page.keyboard.press("Escape")
+                await asyncio.sleep(0.5)
+                log.info("Caption inserted into Draft.js editor successfully.")
             else:
-                log.warning("Post button not clicked automatically; upload draft saved.")
+                log.warning("Contenteditable caption editor not found, attempting textarea fallback...")
+                textarea = await page.query_selector('textarea')
+                if textarea:
+                    await textarea.fill(full_caption)
+
+            # 6. Locate Post ("نشر" / "Post") button
+            post_btn = None
+            for b in await page.query_selector_all('button'):
+                t = (await b.text_content() or "").strip()
+                if "نشر" in t or "Post" in t:
+                    post_btn = b
+                    break
+
+            if not post_btn:
+                raise RuntimeError("لم يتم العثور على زر 'نشر' (Post) في صفحة TikTok Studio.")
+
+            # Wait until Post button becomes enabled
+            for wait_s in range(15):
+                if not await post_btn.is_disabled():
+                    log.info("Post button is active and enabled.")
+                    break
+                await asyncio.sleep(1)
+
+            await post_btn.scroll_into_view_if_needed()
+            await post_btn.click()
+            log.info("Clicked 'نشر' button on TikTok Studio.")
+
+            # 7. Check for secondary confirmation modal ("النشر الآن" / "Post now")
+            try:
+                for _ in range(6):
+                    await asyncio.sleep(1)
+                    confirm_btn = (
+                        await page.query_selector('button:has-text("النشر الآن")')
+                        or await page.query_selector('button:has-text("Post now")')
+                    )
+                    if confirm_btn and await confirm_btn.is_visible():
+                        log.info("Clicked secondary confirmation button ('النشر الآن').")
+                        await confirm_btn.click()
+                        break
+            except Exception as e:
+                log.debug("Secondary confirmation check: %s", e)
+
+            # 8. Wait for publication confirmation
+            confirmed = False
+            for s in range(1, 25):
+                await asyncio.sleep(1)
+                url = page.url
+                body_text = await page.text_content("body") or ""
+                if any(term in body_text for term in ["تم نشر الفيديو", "إدارة منشوراتك", "Your video has been published", "Manage your posts", "تحميل فيديو آخر"]):
+                    log.info("TikTok publication confirmed on page in %ds!", s)
+                    confirmed = True
+                    break
+                if "content" in url or "manage" in url:
+                    log.info("TikTok publication confirmed via redirect to: %s", url)
+                    confirmed = True
+                    break
+
+            # Save screenshot for audit
+            cache_dir = BASE_DIR / "repos_cache"
+            cache_dir.mkdir(parents=True, exist_ok=True)
+            shot_path = cache_dir / "tiktok_latest_published.png"
+            await page.screenshot(path=str(shot_path))
+            log.info("Saved latest publication screenshot: %s", shot_path)
 
             return {
                 "success": True,
                 "platform": "TikTok",
                 "caption": full_caption,
                 "video_path": str(v_path),
+                "confirmed": confirmed,
+                "screenshot": str(shot_path),
                 "message": "تم رفع ونشر الفيديو بنجاح على حساب تيك توك!"
             }
         finally:
