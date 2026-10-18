@@ -231,6 +231,72 @@ async def _handle_fruit_fight_match(args: dict[str, Any]) -> str:
         return f"❌ خطأ أثناء إنتاج فيديو نزال الفواكه: {e}"
 
 
+CINEMA_DIR = BASE_DIR.parent / "ai-cinematic-studio"
+CINEMA_SCRIPT = CINEMA_DIR / "studio.py"
+
+
+async def generate_cinematic_storyboard(template: str = "drama", output_prefix: str = "") -> dict[str, Any]:
+    """Runs the AI Cinematic Studio storyboard director."""
+    if not CINEMA_SCRIPT.exists():
+        raise FileNotFoundError(f"AI Cinematic Studio script not found at: {CINEMA_SCRIPT}")
+
+    python_bin = str(PORTABLE_PY) if PORTABLE_PY.exists() else sys.executable
+    prefix = output_prefix or f"telegram_{template}_{int(time.time())}"
+    cmd = [
+        python_bin,
+        str(CINEMA_SCRIPT),
+        "--template", template,
+        "--output", prefix,
+    ]
+
+    log.info("Launching AI Cinematic Studio: %s", " ".join(cmd))
+    proc = await asyncio.create_subprocess_exec(
+        *cmd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+        cwd=str(CINEMA_DIR),
+    )
+
+    stdout, stderr = await proc.communicate()
+    if proc.returncode != 0:
+        err_msg = stderr.decode("utf-8", errors="replace")
+        log.error("AI Cinematic Studio failed: %s", err_msg)
+        raise RuntimeError(f"فشل إنتاج الستوريبورد السينمائي: {err_msg[:400]}")
+
+    out_dir = CINEMA_DIR / "out"
+    json_file = out_dir / f"{prefix}_storyboard.json"
+    md_file = out_dir / f"{prefix}_treatment.md"
+
+    md_content = md_file.read_text(encoding="utf-8") if md_file.exists() else ""
+
+    return {
+        "success": True,
+        "template": template,
+        "json_path": str(json_file),
+        "md_path": str(md_file),
+        "treatment_preview": md_content[:2500] if md_content else "",
+        "message": f"تم إنتاج الستوريبورد السينمائي والمعالجة الإخراجية لقالب [{template}] بنجاح!"
+    }
+
+
+async def _handle_cinematic_storyboard(args: dict[str, Any]) -> str:
+    """Agent tool handler for creating cinematic storyboards and prompts."""
+    try:
+        template = args.get("template", "drama")
+        res = await generate_cinematic_storyboard(template=template)
+        return (
+            f"🎬 **تم إنتاج الستوريبورد السينمائي بنجاح!**\n\n"
+            f"🎭 **القالب:** `{template}`\n"
+            f"📁 **ملف الـ JSON البرمجي:** `{res['json_path']}`\n"
+            f"📄 **ملف المعالجة (Markdown):** `{res['md_path']}`\n\n"
+            f"**معاينة المعالجة الإخراجية والبرومبتات:**\n"
+            f"{res['treatment_preview'][:1500]}"
+        )
+    except Exception as e:
+        log.exception("Cinematic storyboard error")
+        return f"❌ خطأ أثناء توليد الستوريبورد السينمائي: {e}"
+
+
 TOOLS = [
     {
         "name": "create_motion_masterclass",
@@ -273,5 +339,21 @@ TOOLS = [
             "required": []
         },
         "handler": _handle_fruit_fight_match
+    },
+    {
+        "name": "create_cinematic_storyboard",
+        "description": "ينتج ستوريبورد سينمائي ومعالجة إخراجية فائقة الواقعية 8K (ARRI Alexa, Unreal Engine 5.4, Micro-droplets, Sub-surface scattering) لأفلام الفواكه الفيروسية مثل دراما التفاحة الحزينة أو قتال مورتال كومبات مع أوامر فيزياء الكاميرا والتعليق الصوتي.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "template": {
+                    "type": "string",
+                    "enum": ["drama", "fight"],
+                    "description": "قالب الستوريبورد: drama (دراما التفاحة الحزينة والأمومة) أو fight (مورتال كومبات الفواكه)"
+                }
+            },
+            "required": ["template"]
+        },
+        "handler": _handle_cinematic_storyboard
     }
 ]

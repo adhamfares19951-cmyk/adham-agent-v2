@@ -1441,6 +1441,52 @@ async def fight_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         await msg.reply_text(f"❌ حدث خطأ أثناء إنتاج فيديو النزال:\n<code>{e}</code>", parse_mode="HTML")
 
 
+async def cinema_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/cinema [drama|fight] — generates hyper-realistic cinematic storyboard and treatment."""
+    msg = update.effective_message
+    from tools import motion_studio
+
+    template = "drama"
+    if context.args:
+        arg = context.args[0].lower()
+        if "fight" in arg or "kombat" in arg or "قتال" in arg or "ملاكمة" in arg:
+            template = "fight"
+        elif "drama" in arg or "apple" in arg or "تفاحة" in arg or "دراما" in arg:
+            template = "drama"
+
+    genre_label = "دراما التفاحة والأمومة الصامدة (Sad Apple Mother Drama)" if template == "drama" else "قتال مورتال كومبات الفواكه (Mortal Kombat Fruit Brawl)"
+    await msg.reply_text(
+        f"🎬 **جاري تشغيل استوديو الإخراج السينمائي فائق الواقعية (AI Cinematic Studio)!**\n\n"
+        f"🎭 **القالب المختار:** {genre_label}\n"
+        f"✨ **المعايير:** ARRI Alexa 65 + Unreal Engine 5.4 + Sub-surface scattering + فيزياء الكاميرا الواقعية\n\n"
+        f"⏳ جاري هندسة البرومبتات الـ 8K، وتوزيع اللقطات، وتوليد ملف المعالجة الإخراجية..."
+    )
+
+    try:
+        res = await motion_studio.generate_cinematic_storyboard(template=template)
+        md_path = Path(res["md_path"])
+
+        preview_text = res.get("treatment_preview", "")
+        if len(preview_text) > 3500:
+            preview_text = preview_text[:3500] + "\n\n... (المعالجة كاملة في الملف المرفق أدناه)"
+
+        await msg.reply_text(
+            f"🎬 **تم إنتاج الستوريبورد والمعالجة السينمائية بنجاح!**\n\n"
+            f"{preview_text}"
+        )
+
+        if md_path.exists():
+            with open(md_path, "rb") as mf:
+                await msg.reply_document(
+                    document=mf,
+                    filename=md_path.name,
+                    caption=f"📄 ملف المعالجة السينمائية الكامل ({genre_label})"
+                )
+    except Exception as e:
+        log.error("Error in cinema_command:\n%s", traceback.format_exc())
+        await msg.reply_text(f"❌ حدث خطأ أثناء إنتاج الستوريبورد السينمائي:\n<code>{e}</code>", parse_mode="HTML")
+
+
 async def autocut_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """/autocut [video_path] — trims dead air and silence using video-use heuristics."""
     msg = update.effective_message
@@ -1613,6 +1659,9 @@ def main() -> None:
     app.add_handler(CommandHandler("talking_object", fruit_command, filters=owner))
     app.add_handler(CommandHandler("fight", fight_command, filters=owner))
     app.add_handler(CommandHandler("wrestling", fight_command, filters=owner))
+    app.add_handler(CommandHandler("cinema", cinema_command, filters=owner))
+    app.add_handler(CommandHandler("drama", cinema_command, filters=owner))
+    app.add_handler(CommandHandler("storyboard", cinema_command, filters=owner))
     app.add_handler(CommandHandler("tiktok", tiktok_command, filters=owner))
     app.add_handler(CommandHandler("autocut", autocut_command, filters=owner))
     app.add_handler(CommandHandler("grade", grade_command, filters=owner))
