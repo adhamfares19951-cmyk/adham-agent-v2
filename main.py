@@ -1325,6 +1325,41 @@ async def tiktok_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         )
 
 
+async def publish_long_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/publish_long or /masterclass [topic] — generates high-end 60FPS motion graphics masterclass (16:9 1080p)."""
+    msg = update.effective_message
+    from tools import motion_studio
+
+    topic = " ".join(context.args).strip() if context.args else "استراتيجية صيد السيولة والأوردر بلوك للذهب"
+
+    await msg.reply_text(
+        f"🎬 **جاري تشغيل استوديو الموشن جرافيك العالمي (Motion Video Studio)!**\n\n"
+        f"📌 **الموضوع:** {topic}\n"
+        f"⚡ **التقنية:** Remotion 60FPS + فيزياء النوابض (Spring Physics)\n"
+        f"📈 **العناصر:** شموع متحركة لايف + كروت منبثقة بتطلع وتنزل + فصول متعددة + تعليق صوتي عصبي استوديو\n\n"
+        f"⏳ جاري كتابة السيناريو ورسم الشارتات وتصيير الفيديو..."
+    )
+
+    try:
+        res = await motion_studio.generate_motion_masterclass(topic=topic, ratio="16:9")
+        final_video = Path(res["video_path"])
+
+        with open(final_video, "rb") as vf:
+            await msg.reply_video(
+                video=vf,
+                caption=(
+                    f"🏆 **تم إنتاج الماستركلاس الاحترافي بنجاح!**\n\n"
+                    f"🎬 **العنوان:** {res['topic']}\n"
+                    f"📐 **الأبعاد:** 1920x1080 (16:9 YouTube Masterclass)\n"
+                    f"⚡ **موشن جرافيك حقيقي 60FPS:** شموع مرسومة لايف، كروت تطفو وتنزلق، تقسيم فصول، وصوت استوديو!\n"
+                    f"📁 **الحجم:** {res['size_mb']} MB"
+                )
+            )
+    except Exception as e:
+        log.error("Error in publish_long_command:\n%s", traceback.format_exc())
+        await msg.reply_text(f"❌ حدث خطأ أثناء إنتاج الماستركلاس:\n<code>{e}</code>", parse_mode="HTML")
+
+
 async def autocut_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """/autocut [video_path] — trims dead air and silence using video-use heuristics."""
     msg = update.effective_message
