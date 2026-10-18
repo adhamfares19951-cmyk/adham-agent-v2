@@ -1407,6 +1407,40 @@ async def fruit_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         await msg.reply_text(f"❌ حدث خطأ أثناء إنتاج فيديو الفاكهة المتكلمة:\n<code>{e}</code>", parse_mode="HTML")
 
 
+async def fight_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/fight — generates the 3-round epic boxing match between Avocado and Apple."""
+    msg = update.effective_message
+    from tools import motion_studio
+
+    await msg.reply_text(
+        "🥊 **جاري إطلاق نزال المصارعة الملحمي بين الأفوكادو والتفاحة!**\n\n"
+        "🏟️ **الحلبة:** حلبة مصارعة كاملة + حبال ديناميكية + كشافات ستاديوم + جمهور يهتف\n"
+        "⚡ **النزال:** 3 جولات كاملة (Round 1 + Round 2 + Final K.O.)\n"
+        "🍋 **الحكم:** ليمونة بقميص الحكام وصفارة يحسم النزال\n"
+        "🎙️ **التعليق:** صوت معلق رياضي حماسي بنبرة WWE\n\n"
+        "⏳ جاري تجهيز الحلبة وتصيير الفيديو بدقة 1080x1920..."
+    )
+
+    try:
+        res = await motion_studio.generate_fruit_fight_match()
+        final_video = Path(res["video_path"])
+
+        with open(final_video, "rb") as vf:
+            await msg.reply_video(
+                video=vf,
+                caption=(
+                    "🥊 **تم إنتاج فيديو نزال المصارعة بنجاح!**\n\n"
+                    "🥑 **الأفوكادو ضد التفاحة 🍎 (3 جولات)**\n"
+                    "🏆 **الفائز بالضربة القاضية:** مستر أفوكادو!\n"
+                    "📐 **الأبعاد:** 1080x1920 (9:16 TikTok / Reels)\n"
+                    f"📁 **الحجم:** {res['size_mb']} MB"
+                )
+            )
+    except Exception as e:
+        log.error("Error in fight_command:\n%s", traceback.format_exc())
+        await msg.reply_text(f"❌ حدث خطأ أثناء إنتاج فيديو النزال:\n<code>{e}</code>", parse_mode="HTML")
+
+
 async def autocut_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """/autocut [video_path] — trims dead air and silence using video-use heuristics."""
     msg = update.effective_message
@@ -1577,6 +1611,8 @@ def main() -> None:
     app.add_handler(CommandHandler("masterclass", publish_long_command, filters=owner))
     app.add_handler(CommandHandler("fruit", fruit_command, filters=owner))
     app.add_handler(CommandHandler("talking_object", fruit_command, filters=owner))
+    app.add_handler(CommandHandler("fight", fight_command, filters=owner))
+    app.add_handler(CommandHandler("wrestling", fight_command, filters=owner))
     app.add_handler(CommandHandler("tiktok", tiktok_command, filters=owner))
     app.add_handler(CommandHandler("autocut", autocut_command, filters=owner))
     app.add_handler(CommandHandler("grade", grade_command, filters=owner))

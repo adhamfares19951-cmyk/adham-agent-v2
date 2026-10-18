@@ -144,6 +144,51 @@ async def _handle_motion_masterclass(args: dict[str, Any]) -> str:
         return f"❌ خطأ أثناء إنتاج فيديو الموشن جرافيك: {e}"
 
 
+async def generate_fruit_fight_match(
+    output_filename: str | None = None,
+) -> dict[str, Any]:
+    """Runs the 3-round fruit wrestling match production pipeline."""
+    if not STUDIO_SCRIPT.exists():
+        raise FileNotFoundError(f"Motion Video Studio not found at: {STUDIO_SCRIPT}")
+
+    python_bin = str(PORTABLE_PY) if PORTABLE_PY.exists() else sys.executable
+    cmd = [
+        python_bin,
+        str(STUDIO_SCRIPT),
+        "--mode", "fight",
+    ]
+
+    log.info("Launching Fruit Wrestling Match: %s", " ".join(cmd))
+    proc = await asyncio.create_subprocess_exec(
+        *cmd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+        cwd=str(STUDIO_DIR),
+    )
+
+    stdout, stderr = await proc.communicate()
+    if proc.returncode != 0:
+        err_msg = stderr.decode("utf-8", errors="replace")
+        log.error("Fruit Wrestling Match failed: %s", err_msg)
+        raise RuntimeError(f"فشل إنتاج فيديو مصارعة الفواكه: {err_msg[:400]}")
+
+    out_dir = STUDIO_DIR / "out"
+    matching = sorted(out_dir.glob("fruit_fight_*.mp4"), key=lambda p: p.stat().st_mtime, reverse=True)
+    if not matching:
+        matching = sorted(out_dir.glob("fruit_wrestling_match.mp4"), key=lambda p: p.stat().st_mtime, reverse=True)
+
+    if not matching:
+        raise FileNotFoundError("لم يتم العثور على ملف فيديو نزال الفواكه في مجلد out.")
+
+    output_video = matching[0]
+    return {
+        "success": True,
+        "video_path": str(output_video),
+        "title": "المعركة الكبرى: أفوكادو ضد تفاحة (3 جولات)",
+        "size_mb": round(output_video.stat().st_size / (1024 * 1024), 2),
+    }
+
+
 async def _handle_talking_fruit_short(args: dict[str, Any]) -> str:
     """Agent tool handler for generating talking fruit / object comedy shorts."""
     topic = args.get("topic", "مستر برتقال في خطر")
@@ -163,6 +208,27 @@ async def _handle_talking_fruit_short(args: dict[str, Any]) -> str:
     except Exception as e:
         log.exception("Talking fruit short error")
         return f"❌ خطأ أثناء إنتاج فيديو الفاكهة المتكلمة: {e}"
+
+
+async def _handle_fruit_fight_match(args: dict[str, Any]) -> str:
+    """Agent tool handler for generating the 3-round fruit wrestling brawl."""
+    try:
+        res = await generate_fruit_fight_match()
+        return (
+            f"🥊 **تم إنتاج فيديو نزال المصارعة بين الأفوكادو والتفاحة بنجاح!**\n\n"
+            f"🏟️ **الحلبة:** حلبة مصارعة كاملة + حبال ديناميكية + كشافات ستاديوم + جمهور يهتف ويرفع لافتات\n"
+            f"⚡ **النزال:** 3 جولات كاملة (Round 1 + Round 2 + Final K.O.)\n"
+            f"🥑 **المقاتل 1:** الأفوكادو بقفازات ملاكمة حمراء\n"
+            f"🍎 **المقاتل 2:** التفاحة بقفازات ملاكمة زرقاء وعصابة رأس مقاتل\n"
+            f"🍋 **الحكم:** ليمونة بقميص الحكام المقلم وصفارة يقف بينهما ويحسم النتيجة\n"
+            f"📊 **الـ HUD:** أشرطة صحة (Health Bars) تنقص مع كل ضربة + مؤثرات POW! و BAM! و K.O.!\n"
+            f"🎙️ **التعليق:** تعليق حماسي احترافي بنبرة معلقي المصارعة العالمية\n"
+            f"📁 **مسار الملف:** `{res['video_path']}`\n"
+            f"💾 **الحجم:** {res['size_mb']} MB"
+        )
+    except Exception as e:
+        log.exception("Fruit fight match error")
+        return f"❌ خطأ أثناء إنتاج فيديو نزال الفواكه: {e}"
 
 
 TOOLS = [
@@ -197,5 +263,15 @@ TOOLS = [
             "required": ["character"]
         },
         "handler": _handle_talking_fruit_short
+    },
+    {
+        "name": "create_fruit_fight_match",
+        "description": "ينتج فيديو ملحمي لنزال مصارعة وملاكمة متكامل بين الفواكه (أفوكادو ضد تفاحة) في حلبة مصارعة مع حبال وأضواء وجمهور يهتف، وحكم رسمي، وأشرطة صحة Health Bars، وقتال على 3 جولات ينتهي بالضربة القاضية K.O. وتعليق حماسي.",
+        "parameters": {
+            "type": "object",
+            "properties": {},
+            "required": []
+        },
+        "handler": _handle_fruit_fight_match
     }
 ]
