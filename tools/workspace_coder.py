@@ -18,7 +18,7 @@ from typing import Any
 
 log = logging.getLogger("workspace_coder")
 
-# Root workspace directory: c:/Users/adham/Desktop/new
+# Root workspace directory: C:/Projects
 WORKSPACE_ROOT = Path(__file__).resolve().parent.parent.parent
 
 PROJECTS_MAP = {

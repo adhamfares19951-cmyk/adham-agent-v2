@@ -1,4 +1,5 @@
 """SQLite storage: conversation history, saved facts, reminders, daily usage."""
+import json
 import sqlite3
 from contextlib import contextmanager
 from datetime import datetime
@@ -11,7 +12,8 @@ DB_PATH = config.BASE_DIR / "agent_memory.db"
 
 @contextmanager
 def _db():
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=30.0)
+    conn.execute("PRAGMA journal_mode = WAL;")
     conn.row_factory = sqlite3.Row
     try:
         yield conn
@@ -86,7 +88,142 @@ def init_db() -> None:
                 notes TEXT NOT NULL DEFAULT '',
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP
             );
+            CREATE TABLE IF NOT EXISTS approval_queue (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                action_type TEXT NOT NULL,          -- publish_video | marketing_campaign | store_mod | server_exec
+                payload TEXT NOT NULL,              -- JSON payload or action parameters
+                description TEXT NOT NULL,          -- Arabic human-readable action brief
+                status TEXT NOT NULL DEFAULT 'pending',  -- pending | approved | rejected | executed
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                resolved_at DATETIME
+            );
+            CREATE TABLE IF NOT EXISTS store_products (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                category TEXT NOT NULL,
+                price REAL NOT NULL DEFAULT 0.0,
+                description TEXT NOT NULL,
+                features_json TEXT NOT NULL DEFAULT '[]',
+                badge TEXT NOT NULL DEFAULT '',
+                is_active INTEGER NOT NULL DEFAULT 1,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE TABLE IF NOT EXISTS client_orders (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                client_name TEXT NOT NULL,
+                phone_whatsapp TEXT NOT NULL,
+                service_or_product TEXT NOT NULL,
+                details TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'new',  -- new | contacted | in_progress | completed | cancelled
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE TABLE IF NOT EXISTS verified_leads (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                business_name TEXT NOT NULL,
+                phone TEXT NOT NULL DEFAULT '',
+                source_url TEXT NOT NULL,
+                proposed_pitch TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'new',  -- new | pitched | contacted | won | dismissed
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE TABLE IF NOT EXISTS api_cache (
+                cache_key TEXT PRIMARY KEY,
+                url TEXT NOT NULL,
+                method TEXT NOT NULL DEFAULT 'GET',
+                status_code INTEGER NOT NULL,
+                response_body TEXT NOT NULL,
+                headers_json TEXT NOT NULL DEFAULT '{}',
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                expires_at INTEGER NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_api_cache_expires ON api_cache (expires_at);
         """)
+
+        # Auto-seed initial store products if empty
+        prod_count = c.execute("SELECT COUNT(*) FROM store_products").fetchone()[0]
+        if prod_count == 0:
+            seed_products = [
+                (
+                    "نظام شامل POS (Shamel POS v1.0)",
+                    "أنظمة محاسبة ونقاط بيع",
+                    250.0,
+                    "نظام كاشير ومبيعات مكتبي متكامل بتصميم عصري (Offline-First) يعمل بدون الحاجة لأي اتصال إنترنت، مخصص للمحلات التجارية، معارض الأزياء، والسوبرماركت، مع إدارة المخزون والفواتير والباركود وتقارير الإغلاق اليومي Z-Report.",
+                    json.dumps([
+                        "يعمل 100% بدون إنترنت (قاعدة بيانات SQLite محلية فائقة السرعة)",
+                        "واجهة كاشير لمس سريعة تدعم شاشات اللمس والباركود",
+                        "إدارة المخزون، الجرد، والتنبيه التلقائي بالنواقص",
+                        "فواتير حرارية وسندات قبض متوافقة مع جميع طابعات ESC/POS",
+                        "تقارير محاسبية مفصلة وأرباح يومية وشهرية"
+                    ], ensure_ascii=False),
+                    "الأكثر طلباً 🔥",
+                    1
+                ),
+                (
+                    "منظومة وكلاء الذكاء الاصطناعي (Custom AI Agents)",
+                    "أتمتة وذكاء اصطناعي",
+                    350.0,
+                    "تطوير وكلاء ذكاء اصطناعي مخصصين لشركتك لأتمتة خدمة العملاء والمبيعات والمتابعة اللحظية عبر تيليجرام وواتساب، مع ربط مباشر بقواعد بياناتك واسترجاع دقيق بدون هلوسة.",
+                    json.dumps([
+                        "توجيه هجين فائق الذكاء (Ollama محلي + OpenRouter + Gemini)",
+                        "رد آلي فوري 24/7 عبر تيليجرام والواتساب بصوت ونص ذكي",
+                        "ربط حتمي بقاعدة بيانات العملاء والمنتجات",
+                        "لوحة تحكم وطابور موافقات لضمان السيطرة البشرية (HITL)",
+                        "تنفيذ تلقائي للمهام والتقارير اليومية"
+                    ], ensure_ascii=False),
+                    "Enterprise AI 🤖",
+                    1
+                ),
+                (
+                    "باقة هندسة وبرمجة شبكات MikroTik",
+                    "شبكات وبنية تحتية",
+                    150.0,
+                    "تصميم وهندسة شبكات MikroTik الاحترافية للشركات والفنادق ومزودي الخدمة، تشمل تقسيم VLANs، دمج خطوط الإنترنت (Load Balancing / PCC)، بوابات الهوت سبوت، وحماية الشبكة من الاختراق.",
+                    json.dumps([
+                        "تقسيم شبكات متقدم (VLANs & Subnetting) مع عزل أمني صارم",
+                        "دمج خطوط الإنترنت (Failover & Bandwidth Aggregation)",
+                        "نظام Hotspot وكروت مستخدمين وحماية الماك أدرس",
+                        "جدار حماية متطور وسكربتات RouterOS RSC مجربة 100%",
+                        "إدارة وتحكم عن بُعد مع مراقبة حية للسيرفرات"
+                    ], ensure_ascii=False),
+                    "هندسة شبكات ⚡",
+                    1
+                ),
+                (
+                    "تصميم وبرمجة منظومات الطاقة الشمسية",
+                    "طاقة بديلة وهندسة كهربائية",
+                    120.0,
+                    "دراسة أحمال هندسية دقيقة 100% وحسابات فيزيائية حتمية لمنظومات الطاقة الشمسية المنزلية والتجارية، مع حساب قدرة الإنفرتر، سعة البطاريات (جل وليثيوم)، وتوزيع الألواح وبرمجة شواحن MPPT.",
+                    json.dumps([
+                        "حسابات حتمية تمنع الأخطاء وحرق الأجهزة (Zero-Hallucination)",
+                        "تحديد دقيق لسعة البطاريات المطلوبة بالأمبير-ساعة (Ah)",
+                        "حساب قدرة الإنفرتر بالـ VA مع هامش أمان 30% وتيار الإقلاع",
+                        "مخطط توصيل الألواح ونظم الشحن MPPT المتوافقة",
+                        "دراسة جدوى وتوفير تكاليف مع تقرير فني شامل"
+                    ], ensure_ascii=False),
+                    "طاقة نظيفة ☀️",
+                    1
+                ),
+                (
+                    "تطوير المواقع والتطبيقات المخصصة",
+                    "تطوير برمجيات",
+                    400.0,
+                    "بناء وتطوير تطبيقات سطح المكتب وتطبيقات الويب السحابية السريعة والآمنة باستخدام أحدث التقنيات (Python, Laravel, Tauri, Vue/Tailwind)، مع معمارية معيارية قابلة للتوسع.",
+                    json.dumps([
+                        "تطبيقات سطح مكتب سريعة وخفيفة الحجم باستخدام Tauri & Rust/Python",
+                        "لوحات تحكم وأنظمة إدارة ويب قوية وآمنة بـ Laravel و FastAPI",
+                        "تصاميم فريدة وعصرية متجاوبة بالكامل Dark Tech & Mobile-First",
+                        "ربط بوابات الدفع الإلكتروني والرسائل القصيرة والمزامنة السحابية",
+                        "كود نظيف مع اختبارات جودة آلية 100%"
+                    ], ensure_ascii=False),
+                    "Full-Stack 💻",
+                    1
+                )
+            ]
+            c.executemany(
+                "INSERT INTO store_products (name, category, price, description, features_json, badge, is_active) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                seed_products
+            )
         # Migration: older DBs have a facts table with no embedding column yet.
         cols = {row["name"] for row in c.execute("PRAGMA table_info(facts)").fetchall()}
         if "embedding" not in cols:
@@ -331,3 +468,201 @@ def get_usage(kind: str) -> int:
     with _db() as c:
         row = c.execute("SELECT count FROM usage WHERE day = ? AND kind = ?", (_today(), kind)).fetchone()
     return row[0] if row else 0
+
+
+# ---------------------------------------------------------------- approval queue
+
+def add_approval_item(action_type: str, description: str, payload: str | dict | list) -> int:
+    """Adds a sensitive action request to the approval queue for human review."""
+    payload_str = payload if isinstance(payload, str) else json.dumps(payload, ensure_ascii=False)
+    with _db() as c:
+        return c.execute(
+            "INSERT INTO approval_queue (action_type, description, payload, status) VALUES (?, ?, ?, 'pending')",
+            (action_type, description, payload_str),
+        ).lastrowid
+
+
+def get_pending_approvals() -> list[sqlite3.Row]:
+    """Retrieves all pending actions waiting for Adham's approval."""
+    with _db() as c:
+        return c.execute(
+            "SELECT id, action_type, description, payload, created_at FROM approval_queue "
+            "WHERE status = 'pending' ORDER BY id DESC"
+        ).fetchall()
+
+
+def get_approval_item(item_id: int) -> sqlite3.Row | None:
+    """Retrieves a single approval item by ID."""
+    with _db() as c:
+        return c.execute("SELECT * FROM approval_queue WHERE id = ?", (item_id,)).fetchone()
+
+
+def update_approval_status(item_id: int, status: str) -> bool:
+    """Updates approval status (approved | rejected | executed) with resolution timestamp."""
+    with _db() as c:
+        return c.execute(
+            "UPDATE approval_queue SET status = ?, resolved_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (status, item_id),
+        ).rowcount > 0
+
+
+def list_recent_approvals(limit: int = 10) -> list[sqlite3.Row]:
+    """Lists the latest approvals for auditing."""
+    with _db() as c:
+        return c.execute(
+            "SELECT * FROM approval_queue ORDER BY id DESC LIMIT ?", (limit,)
+        ).fetchall()
+
+
+# ---------------------------------------------------------------- store products
+
+def list_products(active_only: bool = True) -> list[sqlite3.Row]:
+    """Lists store products and services."""
+    with _db() as c:
+        if active_only:
+            return c.execute(
+                "SELECT * FROM store_products WHERE is_active = 1 ORDER BY id ASC"
+            ).fetchall()
+        return c.execute("SELECT * FROM store_products ORDER BY id ASC").fetchall()
+
+
+def get_product(product_id: int) -> sqlite3.Row | None:
+    """Gets a single product by ID."""
+    with _db() as c:
+        return c.execute("SELECT * FROM store_products WHERE id = ?", (product_id,)).fetchone()
+
+
+def add_or_update_product(
+    name: str,
+    category: str,
+    price: float,
+    description: str,
+    badge: str = "",
+    features: list[str] | str = None,
+    product_id: int | None = None,
+    is_active: int = 1,
+) -> int:
+    """Adds a new store product or updates an existing one."""
+    if features is None:
+        features_json = "[]"
+    elif isinstance(features, list):
+        features_json = json.dumps(features, ensure_ascii=False)
+    else:
+        features_json = str(features)
+
+    with _db() as c:
+        if product_id:
+            c.execute(
+                "UPDATE store_products SET name = ?, category = ?, price = ?, description = ?, "
+                "features_json = ?, badge = ?, is_active = ? WHERE id = ?",
+                (name, category, float(price), description, features_json, badge, is_active, product_id),
+            )
+            return product_id
+        return c.execute(
+            "INSERT INTO store_products (name, category, price, description, features_json, badge, is_active) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (name, category, float(price), description, features_json, badge, is_active),
+        ).lastrowid
+
+
+def delete_product(product_id: int) -> bool:
+    """Deletes a product by ID."""
+    with _db() as c:
+        return c.execute("DELETE FROM store_products WHERE id = ?", (product_id,)).rowcount > 0
+
+
+# ---------------------------------------------------------------- client orders
+
+def create_client_order(
+    client_name: str,
+    phone_whatsapp: str,
+    service_or_product: str,
+    details: str = "",
+) -> int:
+    """Creates a new client order from the web platform or store."""
+    with _db() as c:
+        return c.execute(
+            "INSERT INTO client_orders (client_name, phone_whatsapp, service_or_product, details, status) "
+            "VALUES (?, ?, ?, ?, 'new')",
+            (client_name.strip(), phone_whatsapp.strip(), service_or_product.strip(), details.strip()),
+        ).lastrowid
+
+
+def list_client_orders(status: str | None = None, limit: int = 50) -> list[sqlite3.Row]:
+    """Lists client orders, optionally filtered by status (new | contacted | in_progress | completed)."""
+    with _db() as c:
+        if status:
+            return c.execute(
+                "SELECT * FROM client_orders WHERE status = ? ORDER BY id DESC LIMIT ?",
+                (status, limit),
+            ).fetchall()
+        return c.execute(
+            "SELECT * FROM client_orders ORDER BY id DESC LIMIT ?", (limit,)
+        ).fetchall()
+
+
+def update_order_status(order_id: int, status: str) -> bool:
+    """Updates order status."""
+    with _db() as c:
+        return c.execute(
+            "UPDATE client_orders SET status = ? WHERE id = ?", (status, order_id)
+        ).rowcount > 0
+
+
+def get_client_order(order_id: int) -> sqlite3.Row | None:
+    """Retrieves an order by ID."""
+    with _db() as c:
+        return c.execute("SELECT * FROM client_orders WHERE id = ?", (order_id,)).fetchone()
+
+
+# ---------------------------------------------------------------- verified leads (Zero-Hallucination)
+
+def add_verified_lead(
+    business_name: str,
+    phone: str,
+    source_url: str,
+    proposed_pitch: str = "",
+    status: str = "new",
+) -> int:
+    """Saves a verified real lead into the database."""
+    with _db() as c:
+        # Check if URL or phone already exists
+        if phone:
+            existing = c.execute("SELECT id FROM verified_leads WHERE phone = ?", (phone.strip(),)).fetchone()
+            if existing:
+                return existing[0]
+        return c.execute(
+            "INSERT INTO verified_leads (business_name, phone, source_url, proposed_pitch, status) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (business_name.strip(), phone.strip(), source_url.strip(), proposed_pitch.strip(), status),
+        ).lastrowid
+
+
+def list_verified_leads(status: str | None = None, limit: int = 50) -> list[sqlite3.Row]:
+    """Lists verified business leads."""
+    with _db() as c:
+        if status:
+            return c.execute(
+                "SELECT * FROM verified_leads WHERE status = ? ORDER BY id DESC LIMIT ?",
+                (status, limit),
+            ).fetchall()
+        return c.execute(
+            "SELECT * FROM verified_leads ORDER BY id DESC LIMIT ?", (limit,)
+        ).fetchall()
+
+
+def update_verified_lead_status(lead_id: int, status: str) -> bool:
+    """Updates status of a verified lead (new | pitched | contacted | won | dismissed)."""
+    with _db() as c:
+        return c.execute(
+            "UPDATE verified_leads SET status = ? WHERE id = ?", (status, lead_id)
+        ).rowcount > 0
+
+
+def get_verified_lead(lead_id: int) -> sqlite3.Row | None:
+    """Retrieves a single verified lead by ID."""
+    with _db() as c:
+        return c.execute("SELECT * FROM verified_leads WHERE id = ?", (lead_id,)).fetchone()
+
+
+

@@ -12,7 +12,7 @@ from typing import Any
 
 log = logging.getLogger("skills_engine")
 
-# Workspace root is 2 levels up from adham-agent (c:/Users/adham/Desktop/new/)
+# Workspace root is 2 levels up from adham-agent (C:/Projects/)
 WORKSPACE_ROOT = Path(__file__).resolve().parent.parent.parent
 SKILLS_DIR = WORKSPACE_ROOT / ".agents" / "skills"
 GLOBAL_SKILLS_DIR = Path.home() / ".gemini" / "config" / "skills"

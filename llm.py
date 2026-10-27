@@ -242,15 +242,16 @@ class AnthropicProvider:
 # ---------------------------------------------------------------- OpenAI-compatible backups
 
 class OpenAICompatibleProvider:
-    """Backup providers that share the OpenAI chat format (Groq, Mistral, OpenRouter, Cerebras)."""
+    """Backup providers that share the OpenAI chat format (Groq, Mistral, OpenRouter, Cerebras, Ollama)."""
 
-    def __init__(self, name: str, url: str, api_key: str, model: str):
+    def __init__(self, name: str, url: str, api_key: str, model: str, extra_headers: dict | None = None):
         import httpx  # already installed with python-telegram-bot
 
         self.name = name
         self.url = url
         self.api_key = api_key
         self.model = model
+        self.extra_headers = extra_headers or {}
         self.client = httpx.AsyncClient(timeout=90)
 
     @staticmethod
@@ -280,6 +281,9 @@ class OpenAICompatibleProvider:
                 "name": t["name"], "description": t["description"], "parameters": t["parameters"]}}
                 for t in tools]
         headers = {"Authorization": f"Bearer {self.api_key}"}
+        if self.extra_headers:
+            headers.update(self.extra_headers)
+
         try:
             resp = await self.client.post(self.url, json=payload, headers=headers)
         except Exception as e:
@@ -315,7 +319,7 @@ class OpenAICompatibleProvider:
         return reply
 
 
-# Backup providers, tried in this order. Each is enabled only if its key AND model are in .env.
+# Backup providers list
 BACKUPS = [
     ("Groq", "https://api.groq.com/openai/v1/chat/completions"),
     ("Cloudflare", "https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/v1/chat/completions"),
@@ -325,7 +329,7 @@ BACKUPS = [
     ("OpenRouter", "https://openrouter.ai/api/v1/chat/completions"),
     ("NVIDIA", "https://integrate.api.nvidia.com/v1/chat/completions"),
     ("ZAI", "https://api.z.ai/api/paas/v4/chat/completions"),
-    ("Ollama", "https://ollama.com/v1/chat/completions"),
+    ("Ollama", getattr(config, "OLLAMA_BASE_URL", "http://127.0.0.1:11434/v1/chat/completions")),
 ]
 
 
@@ -341,7 +345,7 @@ class FallbackLLM:
 
     @property
     def main_name(self) -> str:
-        return self.providers[0][0]
+        return self.providers[0][0] if self.providers else "None"
 
     async def generate(self, system: str, messages: list[dict], tools: list[dict] | None = None) -> Reply:
         now = time.monotonic()
@@ -363,28 +367,242 @@ class FallbackLLM:
         raise last_error or LLMError(EMPTY_MSG)
 
 
-def get_llm() -> FallbackLLM:
+# ---------------------------------------------------------------- Smart Hybrid Router
+
+class SmartRouter(FallbackLLM):
+    """Enterprise Intelligent Hybrid Router for LLM workloads.
+    Routes queries to specialized providers based on task type:
+    - Coding, Networks & Architecture: OpenRouter (DeepSeek) / Strongest Model.
+    - Text Summaries & Initial Triage: Ollama (Local/Cost-Effective) / Fast Model.
+    - General & Fast Tool Use: Follows configured PROVIDER_ORDER with automatic Fallback.
+    """
+
+    def __init__(self, providers: list):
+        super().__init__(providers)
+        self._provider_map: dict[str, tuple[str, object]] = {
+            name.lower(): (name, prov) for name, prov in self.providers
+        }
+
+    @staticmethod
+    def detect_task_type(system: str, messages: list[dict]) -> str:
+        """Heuristic detection of task type from prompt content."""
+        user_content = ""
+        for m in reversed(messages):
+            if m.get("role") == "user" and isinstance(m.get("content"), str):
+                user_content = m["content"].lower()
+                break
+
+        # Coding / Network / Solar / Scripting indicators
+        coding_signals = (
+            "code", "coding", "python", "javascript", "typescript", "flutter", "laravel",
+            "script", "bug", "debug", "error", "traceback", "function", "class", "github",
+            "repo", "mikrotik", "routeros", "subnet", "vlan", "cidr", "ip", "nat", "dhcp",
+            "solar", "inverter", "battery", "photovoltaic", "sql", "sqlite", "api", "endpoint",
+            "كود", "برمجة", "سكربت", "دالة", "خطأ", "تصحيح", "شبكة", "ميكروتك", "راوتر",
+            "طاقة شمسية", "انفرتر", "بطارية", "ألواح", "الواح", "سولار", "قاعدة بيانات", "سيرفر"
+        )
+        # Summarization / Triage indicators
+        summary_signals = (
+            "summarize", "summary", "brief", "digest", "triage", "classify", "tldr",
+            "تلخيص", "ملخص", "لخص", "لخصلي", "اختصر", "اختصار", "مختصر", "موجز", "أوجز",
+            "فرز", "تصنيف", "استخرج رؤوس الأقلام", "رؤوس أقلام"
+        )
+
+        if any(sig in user_content for sig in summary_signals):
+            return "summary"
+        if any(sig in user_content for sig in coding_signals):
+            return "coding"
+        return "general"
+
+    def _get_candidates_for_task(self, task_type: str) -> list[tuple[str, object]]:
+        """Return candidate providers prioritized for the task type."""
+        task = (task_type or "general").lower().strip()
+        if task in ("coding", "network", "code"):
+            # OpenRouter (DeepSeek) preferred for complex coding and network engineering
+            priority = ["openrouter", "gemini", "mistral", "groq", "ollama"]
+        elif task in ("summary", "fast", "triage"):
+            # Ollama (Local/Zero-cost) preferred for summaries and fast triage
+            priority = ["ollama", "groq", "mistral", "gemini", "openrouter"]
+        else:
+            return self.providers
+
+        ordered: list[tuple[str, object]] = []
+        seen = set()
+        for p_name in priority:
+            if p_name in self._provider_map:
+                name, prov = self._provider_map[p_name]
+                ordered.append((name, prov))
+                seen.add(p_name)
+        for name, prov in self.providers:
+            if name.lower() not in seen:
+                ordered.append((name, prov))
+                seen.add(name.lower())
+        return ordered
+
+    async def generate(
+        self,
+        system: str,
+        messages: list[dict],
+        tools: list[dict] | None = None,
+        task_type: str = "auto",
+    ) -> Reply:
+        if not task_type or task_type == "auto":
+            effective_task = self.detect_task_type(system, messages)
+        else:
+            effective_task = task_type.lower().strip()
+
+        candidates_all = self._get_candidates_for_task(effective_task)
+        now = time.monotonic()
+        ready = [(n, p) for n, p in candidates_all if self._resting_until.get(n, 0) <= now]
+        candidates = ready or candidates_all
+
+        last_error = None
+        for name, provider in candidates:
+            try:
+                reply = await provider.generate(system, messages, tools)
+            except LLMError as e:
+                log.warning("[SmartRouter] Provider %s failed on task=%s (%s), triggering fallback",
+                            name, effective_task, e.user_message)
+                self._resting_until[name] = time.monotonic() + self.COOLDOWN
+                last_error = e
+                continue
+            except Exception as e:
+                log.warning("[SmartRouter] Provider %s unexpected error (%s), triggering fallback", name, e)
+                self._resting_until[name] = time.monotonic() + self.COOLDOWN
+                last_error = LLMError(f"خطأ أثناء الاتصال بمزود {name}")
+                continue
+
+            self._resting_until.pop(name, None)
+            reply.provider = name
+            return reply
+
+        raise last_error or LLMError(EMPTY_MSG)
+
+    async def route_task(
+        self,
+        task_type: str,
+        system: str,
+        messages: list[dict],
+        tools: list[dict] | None = None,
+    ) -> Reply:
+        """Explicitly route a task of a given type."""
+        return await self.generate(system, messages, tools, task_type=task_type)
+
+
+async def check_models_status() -> dict:
+    """Live probe of key providers (Ollama, OpenRouter, Gemini) for Telegram dashboard."""
+    import httpx
+
+    status_report = {
+        "ollama": {"status": "غير مفعل", "latency_ms": None, "model": config.OLLAMA_MODEL, "endpoint": config.OLLAMA_BASE_URL},
+        "openrouter": {"status": "غير مفعل", "latency_ms": None, "model": config.OPENROUTER_MODEL, "endpoint": "https://openrouter.ai"},
+        "gemini": {"status": "غير مفعل", "latency_ms": None, "model": config.MODEL, "endpoint": "Google GenAI"},
+    }
+
+    # 1. Probe Ollama (Local/Cloud HTTP check)
+    try:
+        t0 = time.monotonic()
+        # Parse host for tags endpoint
+        base_root = config.OLLAMA_BASE_URL.split("/v1")[0]
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            resp = await client.get(f"{base_root}/api/tags")
+            latency = int((time.monotonic() - t0) * 1000)
+            if resp.status_code == 200:
+                status_report["ollama"]["status"] = f"🟢 متصل ومتاح ({latency}ms)"
+                status_report["ollama"]["latency_ms"] = latency
+            else:
+                status_report["ollama"]["status"] = f"🟡 يعمل (رمز {resp.status_code})"
+    except Exception:
+        status_report["ollama"]["status"] = "🔴 غير متصل حالياً (محلي)"
+
+    # 2. Probe OpenRouter
+    if config.OPENROUTER_API_KEY:
+        try:
+            t0 = time.monotonic()
+            headers = {
+                "Authorization": f"Bearer {config.OPENROUTER_API_KEY}",
+                "HTTP-Referer": "https://github.com/adham-agent",
+                "X-Title": "Adham Agent Enterprise OS",
+            }
+            async with httpx.AsyncClient(timeout=4.0) as client:
+                resp = await client.get("https://openrouter.ai/api/v1/auth/key", headers=headers)
+                latency = int((time.monotonic() - t0) * 1000)
+                if resp.status_code == 200:
+                    status_report["openrouter"]["status"] = f"🟢 متصل ونشط ({latency}ms)"
+                    status_report["openrouter"]["latency_ms"] = latency
+                else:
+                    status_report["openrouter"]["status"] = f"🟡 متاح (رمز {resp.status_code})"
+        except Exception:
+            status_report["openrouter"]["status"] = "🟡 مفعل (سحابي جاهز)"
+    else:
+        status_report["openrouter"]["status"] = "⚪ لا يوجد مفتاح"
+
+    # 3. Probe Gemini
+    if config.GEMINI_API_KEY:
+        status_report["gemini"]["status"] = "🟢 متصل ونشط (الأساسي)"
+    else:
+        status_report["gemini"]["status"] = "⚪ غير متاح"
+
+    return status_report
+
+
+_ROUTER_CACHE: SmartRouter | None = None
+
+
+def get_llm() -> SmartRouter:
+    """Builds and returns the configured SmartRouter singleton."""
+    global _ROUTER_CACHE
+    if _ROUTER_CACHE is not None:
+        return _ROUTER_CACHE
+
     if config.AI_PROVIDER == "anthropic":
         providers = [("Anthropic", AnthropicProvider())]
     else:
         providers = [("Gemini", GeminiProvider(config.GEMINI_API_KEY))]
+
     if config.GEMINI_API_KEY and config.GEMINI_BACKUP_MODEL:
         lite = GeminiProvider(config.GEMINI_API_KEY)
         lite.model = config.GEMINI_BACKUP_MODEL
         providers.append(("Gemini-Lite", lite))
+
     if config.GEMINI_API_KEY_2:
         providers.append(("Gemini-2", GeminiProvider(config.GEMINI_API_KEY_2)))
+
     for name, url in BACKUPS:
         key, model = config.BACKUP_KEYS.get(name, ("", ""))
         if name == "Cloudflare":
             if not config.CLOUDFLARE_ACCOUNT_ID:
                 continue
             url = url.format(account_id=config.CLOUDFLARE_ACCOUNT_ID)
+
+        extra_headers = {}
+        if name == "OpenRouter":
+            extra_headers = {
+                "HTTP-Referer": "https://github.com/adham-agent",
+                "X-Title": "Adham Agent Enterprise OS",
+            }
+        elif name == "Ollama":
+            url = config.OLLAMA_BASE_URL
+
         if key and model:
-            providers.append((name, OpenAICompatibleProvider(name, url, key, model)))
+            providers.append((name, OpenAICompatibleProvider(name, url, key, model, extra_headers=extra_headers)))
+
     # PROVIDER_ORDER in .env decides who goes first; providers not listed keep their place after.
     if config.PROVIDER_ORDER and config.AI_PROVIDER != "anthropic":
         rank = {n.lower(): i for i, n in enumerate(config.PROVIDER_ORDER)}
         providers.sort(key=lambda p: rank.get(p[0].lower(), len(rank)))
-    log.info("AI providers in order: %s", " -> ".join(n for n, _ in providers))
-    return FallbackLLM(providers)
+
+    log.info("SmartRouter initialized with providers: %s", " -> ".join(n for n, _ in providers))
+    _ROUTER_CACHE = SmartRouter(providers)
+    return _ROUTER_CACHE
+
+
+def get_smart_router() -> SmartRouter:
+    return get_llm()
+
+
+async def generate(system: str, messages: list[dict], tools: list[dict] | None = None, task_type: str = "auto") -> Reply:
+    """Module-level generation entry point."""
+    router = get_smart_router()
+    return await router.generate(system, messages, tools, task_type=task_type)
+

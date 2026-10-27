@@ -12,12 +12,18 @@ from tools import (
     self_evolution, server_ops, session_manager, skills_engine, social_gig_hunter, social_reach,
     tech_radar, video_assembler, video_autocaption, voice_studio, web_reader, web_search,
     whatsapp_bridge, workspace_coder, youtube_tools, youtube_publisher, video_director,
-    tiktok_publisher, long_video_studio, motion_studio,
+    tiktok_publisher, long_video_studio, motion_studio, engineering_calculators, website_manager,
+    lead_hunter, social_studio, live_data_hub,
 )
 
 log = logging.getLogger("tools")
 
 _MODULES = [
+    live_data_hub,
+    lead_hunter,
+    social_studio,
+    website_manager,
+    engineering_calculators,
     agency_tools, skills_engine, github_engine, workspace_coder, web_search, web_reader, network_tools, tech_radar,
     social_gig_hunter, session_manager, facebook_saved, whatsapp_bridge, browser_pilot, crew_orchestrator,
     project_concat, server_ops, self_evolution, video_assembler, voice_studio, gaza_shops, memory_tools, reminders,

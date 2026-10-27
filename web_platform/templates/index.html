@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>المهندس أدهم الهباش | المنصة التقنية وأنظمة شامل POS والذكاء الاصطناعي</title>
+    <meta name="description" content="المنصة الرسمية للمهندس أدهم الهباش. أنظمة شامل POS أوفلاين، وكلاء الذكاء الاصطناعي، هندسة شبكات MikroTik، وتصميم منظومات الطاقة الشمسية الحتمية.">
+    <!-- Google Fonts: Cairo -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <!-- TailwindCSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Alpine.js CDN -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.8/dist/cdn.min.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        cairo: ['Cairo', 'sans-serif'],
+                    },
+                    colors: {
+                        darkBg: '#090d16',
+                        cardBg: '#0f172a',
+                        surface: '#1e293b',
+                        accentCyan: '#06b6d4',
+                        accentEmerald: '#10b981',
+                        accentIndigo: '#6366f1',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-family: 'Cairo', sans-serif;
+            background-color: #090d16;
+            color: #f1f5f9;
+        }
+        .glow-cyan {
+            box-shadow: 0 0 25px -5px rgba(6, 182, 212, 0.25);
+        }
+        .glow-emerald {
+            box-shadow: 0 0 25px -5px rgba(16, 185, 129, 0.25);
+        }
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(51, 65, 85, 0.5);
+        }
+    </style>
+</head>
+<body x-data="agencyStore()" class="min-h-screen flex flex-col selection:bg-cyan-500 selection:text-white">
+
+    <!-- Top Navigation Bar -->
+    <header class="sticky top-0 z-40 glass-panel border-b border-slate-800/80">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
+            <div class="flex items-center space-x-3 space-x-reverse">
+                <div class="w-11 h-11 rounded-xl bg-gradient-to-tr from-cyan-500 via-indigo-600 to-emerald-400 flex items-center justify-center font-black text-xl shadow-lg shadow-cyan-500/20 text-white">
+                    أ
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white via-slate-100 to-slate-400 tracking-wide">المهندس أدهم الهباش</h1>
+                    <p class="text-xs text-cyan-400 font-medium">Enterprise Autonomous Systems & POS</p>
+                </div>
+            </div>
+
+            <nav class="hidden md:flex items-center space-x-8 space-x-reverse text-sm font-semibold text-slate-300">
+                <a href="#services" class="hover:text-cyan-400 transition">المنتجات والخدمات</a>
+                <a href="#solar-calculator" class="hover:text-cyan-400 transition flex items-center gap-1.5">
+                    <span class="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                    حاسبة الطاقة الشمسية
+                </a>
+                <a href="#features" class="hover:text-cyan-400 transition">الميزات المعمارية</a>
+                <a href="#contact" class="hover:text-cyan-400 transition">تواصل معنا</a>
+            </nav>
+
+            <div class="flex items-center space-x-4 space-x-reverse">
+                <span class="hidden sm:inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                    <span class="w-2 h-2 rounded-full bg-emerald-500 mr-1.5 ml-1 animate-ping"></span>
+                    الأنظمة نشطة 100%
+                </span>
+                <button @click="openOrderModal('استشارة عامة')" class="px-5 py-2.5 rounded-xl font-bold text-sm bg-gradient-to-r from-cyan-500 to-emerald-500 hover:from-cyan-400 hover:to-emerald-400 text-slate-950 shadow-lg shadow-cyan-500/20 hover:scale-105 active:scale-95 transition-all">
+                    اطلب استشارة فورية
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="flex-grow">
+
+        <!-- Hero Section -->
+        <section class="relative overflow-hidden py-20 lg:py-28 border-b border-slate-800/50">
+            <div class="absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(6,182,212,0.15),rgba(255,255,255,0))]"></div>
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 text-center">
+                
+                <div class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-slate-800/80 border border-cyan-500/30 text-xs sm:text-sm text-cyan-300 font-semibold mb-8 backdrop-blur-md">
+                    <span>⚡ المنظومة التقنية المتكاملة للمؤسسات والشركات</span>
+                </div>
+
+                <h1 class="text-3xl sm:text-5xl lg:text-6xl font-black text-white leading-tight sm:leading-tight mb-6">
+                    حلول برمجية ذكية، أنظمة <span class="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-emerald-400 to-indigo-300">Offline-First</span>،<br>
+                    وهندسة شبكات وطاقة بدقة 100%
+                </h1>
+
+                <p class="max-w-3xl mx-auto text-base sm:text-lg text-slate-400 leading-relaxed mb-10">
+                    شريكك التقني لتطوير الأعمال وحل التحديات الهندسية المعقدة. نوفر نظام كاشير ونقاط بيع <strong class="text-white">شامل POS</strong> يعمل باستقلالية تامة بدون إنترنت، أتمتة الأعمال بوكلاء الذكاء الاصطناعي، برمجة شبكات <strong class="text-white">MikroTik</strong>، وحسابات الطاقة الشمسية الحتمية.
+                </p>
+
+                <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
+                    <a href="#services" class="w-full sm:w-auto px-8 py-4 rounded-xl font-bold bg-cyan-500 hover:bg-cyan-400 text-slate-950 shadow-xl shadow-cyan-500/20 text-center transition hover:-translate-y-0.5">
+                        استعراض المنتجات والخدمات
+                    </a>
+                    <a href="#solar-calculator" class="w-full sm:w-auto px-8 py-4 rounded-xl font-bold glass-panel hover:bg-slate-800 text-white border border-slate-700 text-center transition flex items-center justify-center gap-2">
+                        <span>⚡ حاسبة الطاقة الشمسية التفاعلية</span>
+                    </a>
+                </div>
+
+                <!-- Live Metrics Bar -->
+                <div class="mt-16 grid grid-cols-2 sm:grid-cols-4 gap-4 max-w-4xl mx-auto text-right">
+                    <div class="glass-panel p-5 rounded-2xl border-slate-800/80">
+                        <div class="text-2xl sm:text-3xl font-extrabold text-cyan-400 mb-1">10+ سنوات</div>
+                        <div class="text-xs sm:text-sm text-slate-400">خبرة متراكمة في البرمجة والشبكات</div>
+                    </div>
+                    <div class="glass-panel p-5 rounded-2xl border-slate-800/80">
+                        <div class="text-2xl sm:text-3xl font-extrabold text-emerald-400 mb-1">100% Offline</div>
+                        <div class="text-xs sm:text-sm text-slate-400">نظام شامل POS يعمل دون انقطاع</div>
+                    </div>
+                    <div class="glass-panel p-5 rounded-2xl border-slate-800/80">
+                        <div class="text-2xl sm:text-3xl font-extrabold text-indigo-400 mb-1">480+ مهارة</div>
+                        <div class="text-xs sm:text-sm text-slate-400">ترسانة وكلاء الذكاء الاصطناعي</div>
+                    </div>
+                    <div class="glass-panel p-5 rounded-2xl border-slate-800/80">
+                        <div class="text-2xl sm:text-3xl font-extrabold text-amber-400 mb-1">Zero Hallucination</div>
+                        <div class="text-xs sm:text-sm text-slate-400">حسابات هندسية فيزيائية حتمية</div>
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+        <!-- Services & Products Catalog Section -->
+        <section id="services" class="py-20 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center mb-14">
+                <h2 class="text-xs font-bold text-cyan-400 tracking-wider uppercase mb-2">معرض الخدمات والأنظمة المعتمدة</h2>
+                <h3 class="text-3xl sm:text-4xl font-extrabold text-white">منتجاتنا وباقاتنا الجاهزة للتنفيذ فوراً</h3>
+                <p class="mt-3 text-slate-400 max-w-2xl mx-auto text-sm sm:text-base">
+                    جميع المنتجات والخدمات مربوطة لحظياً بقاعدة بيانات النظام المركزي مع ضمان الدعم الفني الميداني والمباشر.
+                </p>
+
+                <!-- Category Filters -->
+                <div class="flex flex-wrap items-center justify-center gap-2 mt-8">
+                    <button @click="selectedCategory = 'all'" :class="selectedCategory === 'all' ? 'bg-cyan-500 text-slate-950 font-bold' : 'bg-slate-800/70 text-slate-400 hover:text-white'" class="px-4 py-2 rounded-xl text-xs sm:text-sm transition">
+                        الكل ({{ products|length }})
+                    </button>
+                    {% for cat in categories %}
+                    <button @click="selectedCategory = '{{ cat }}'" :class="selectedCategory === '{{ cat }}' ? 'bg-cyan-500 text-slate-950 font-bold' : 'bg-slate-800/70 text-slate-400 hover:text-white'" class="px-4 py-2 rounded-xl text-xs sm:text-sm transition">
+                        {{ cat }}
+                    </button>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- Products Grid -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                {% for prod in products %}
+                <div x-show="selectedCategory === 'all' || selectedCategory === '{{ prod.category }}'" x-transition class="glass-panel rounded-3xl p-7 flex flex-col justify-between hover:border-cyan-500/50 hover:shadow-2xl hover:shadow-cyan-500/10 transition-all duration-300 relative group">
+                    <div>
+                        <!-- Header badge -->
+                        <div class="flex items-center justify-between mb-4">
+                            <span class="text-xs font-bold px-3 py-1 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
+                                {{ prod.category }}
+                            </span>
+                            {% if prod.badge %}
+                            <span class="text-xs font-extrabold px-3 py-1 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
+                                {{ prod.badge }}
+                            </span>
+                            {% endif %}
+                        </div>
+
+                        <h4 class="text-xl font-bold text-white group-hover:text-cyan-300 transition-colors mb-3">
+                            {{ prod.name }}
+                        </h4>
+
+                        <p class="text-sm text-slate-400 leading-relaxed mb-6">
+                            {{ prod.description }}
+                        </p>
+
+                        <!-- Features list -->
+                        <div class="border-t border-slate-800/80 pt-4 mb-6">
+                            <div class="text-xs font-semibold text-slate-300 mb-2.5">أبرز المزايا والمواصفات:</div>
+                            <ul class="space-y-2 text-xs sm:text-sm text-slate-300">
+                                {% for f in prod.features %}
+                                <li class="flex items-start gap-2">
+                                    <svg class="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"></path></svg>
+                                    <span>{{ f }}</span>
+                                </li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                    </div>
+
+                    <!-- Footer / Price / Action -->
+                    <div class="border-t border-slate-800/80 pt-5 flex items-center justify-between mt-auto">
+                        <div>
+                            <span class="text-xs text-slate-400 block">التسعير التقديري</span>
+                            <span class="text-2xl font-black text-white">
+                                {% if prod.price > 0 %}
+                                    ${{ "%.0f"|format(prod.price) }}
+                                {% else %}
+                                    حسب المتطلبات
+                                {% endif %}
+                            </span>
+                        </div>
+                        <button @click="openOrderModal('{{ prod.name }}')" class="px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm bg-gradient-to-r from-cyan-500 to-emerald-500 hover:from-cyan-400 hover:to-emerald-400 text-slate-950 shadow-md shadow-cyan-500/10 transition">
+                            اطلب الآن / استشارة
+                        </button>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </section>
+
+        <!-- Interactive Solar Calculator Section -->
+        <section id="solar-calculator" class="py-20 bg-slate-900/60 border-y border-slate-800/60 relative">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                
+                <div class="text-center mb-12">
+                    <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-500/10 text-amber-400 border border-amber-500/30 mb-3">
+                        ⚡ محرك فيزيائي حتمي 100% (Zero-Hallucination)
+                    </span>
+                    <h3 class="text-3xl sm:text-4xl font-extrabold text-white">حاسبة هندسة الطاقة الشمسية التفاعلية</h3>
+                    <p class="text-slate-400 max-w-2xl mx-auto text-sm sm:text-base mt-2">
+                        حدد أحمالك وساعات التشغيل الاحتياطية لتوليد المواصفات الهندسية الدقيقة للإنفرتر والبطاريات والألواح فوراً عبر خوارزمياتنا الحتمية.
+                    </p>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+                    
+                    <!-- Left: Control Inputs -->
+                    <div class="lg:col-span-5 glass-panel p-6 sm:p-8 rounded-3xl border-slate-800">
+                        <h4 class="text-lg font-bold text-white mb-6 flex items-center gap-2">
+                            <span>⚙️ معطيات الأحمال والتشغيل:</span>
+                        </h4>
+
+                        <!-- Load Watts -->
+                        <div class="mb-6">
+                            <div class="flex justify-between items-center mb-2">
+                                <label class="text-sm font-semibold text-slate-300">إجمالي الأحمال المستمرة (Load Watts):</label>
+                                <span class="text-base font-black text-cyan-400" x-text="solarForm.load_watts + ' Watt'"></span>
+                            </div>
+                            <input type="range" min="100" max="8000" step="50" x-model.number="solarForm.load_watts" @input="calculateSolarDebounced()" class="w-full accent-cyan-400 bg-slate-800 h-2 rounded-lg cursor-pointer">
+                            <div class="flex justify-between text-xs text-slate-400 mt-1">
+                                <span>100 واط (إنارة ولابتوب)</span>
+                                <span>3000 واط (منزل متكامل)</span>
+                                <span>8000 واط</span>
+                            </div>
+                        </div>
+
+                        <!-- Backup Hours -->
+                        <div class="mb-6">
+                            <div class="flex justify-between items-center mb-2">
+                                <label class="text-sm font-semibold text-slate-300">ساعات التشغيل الاحتياطي (Backup Hours):</label>
+                                <span class="text-base font-black text-emerald-400" x-text="solarForm.backup_hours + ' ساعات'"></span>
+                            </div>
+                            <input type="range" min="1" max="24" step="0.5" x-model.number="solarForm.backup_hours" @input="calculateSolarDebounced()" class="w-full accent-emerald-400 bg-slate-800 h-2 rounded-lg cursor-pointer">
+                            <div class="flex justify-between text-xs text-slate-400 mt-1">
+                                <span>1 ساعة</span>
+                                <span>6 ساعات</span>
+                                <span>24 ساعة</span>
+                            </div>
+                        </div>
+
+                        <!-- System Voltage -->
+                        <div class="mb-6">
+                            <label class="text-sm font-semibold text-slate-300 block mb-2">جهد بنك البطاريات (System Voltage):</label>
+                            <div class="grid grid-cols-3 gap-2">
+                                <button type="button" @click="solarForm.system_voltage = 12; calculateSolar()" :class="solarForm.system_voltage === 12 ? 'bg-cyan-500 text-slate-950 font-bold' : 'bg-slate-800 text-slate-300'" class="py-2.5 rounded-xl text-sm transition">12 Volt</button>
+                                <button type="button" @click="solarForm.system_voltage = 24; calculateSolar()" :class="solarForm.system_voltage === 24 ? 'bg-cyan-500 text-slate-950 font-bold' : 'bg-slate-800 text-slate-300'" class="py-2.5 rounded-xl text-sm transition">24 Volt (موصى)</button>
+                                <button type="button" @click="solarForm.system_voltage = 48; calculateSolar()" :class="solarForm.system_voltage === 48 ? 'bg-cyan-500 text-slate-950 font-bold' : 'bg-slate-800 text-slate-300'" class="py-2.5 rounded-xl text-sm transition">48 Volt</button>
+                            </div>
+                        </div>
+
+                        <!-- Panel Wattage -->
+                        <div class="mb-6">
+                            <label class="text-sm font-semibold text-slate-300 block mb-2">قدرة اللوح الشمسي الواحد:</label>
+                            <div class="grid grid-cols-3 gap-2">
+                                <button type="button" @click="solarForm.panel_wattage = 400; calculateSolar()" :class="solarForm.panel_wattage === 400 ? 'bg-emerald-500 text-slate-950 font-bold' : 'bg-slate-800 text-slate-300'" class="py-2 rounded-xl text-xs sm:text-sm transition">400 Watt</button>
+                                <button type="button" @click="solarForm.panel_wattage = 450; calculateSolar()" :class="solarForm.panel_wattage === 450 ? 'bg-emerald-500 text-slate-950 font-bold' : 'bg-slate-800 text-slate-300'" class="py-2 rounded-xl text-xs sm:text-sm transition">450 Watt</button>
+                                <button type="button" @click="solarForm.panel_wattage = 550; calculateSolar()" :class="solarForm.panel_wattage === 550 ? 'bg-emerald-500 text-slate-950 font-bold' : 'bg-slate-800 text-slate-300'" class="py-2 rounded-xl text-xs sm:text-sm transition">550 Watt</button>
+                            </div>
+                        </div>
+
+                        <button @click="calculateSolar()" :disabled="solarLoading" class="w-full py-3.5 rounded-xl font-bold bg-gradient-to-r from-cyan-500 via-indigo-500 to-emerald-500 text-white shadow-lg shadow-cyan-500/20 hover:opacity-95 transition flex items-center justify-center gap-2">
+                            <span x-show="!solarLoading">إعادة الحساب الهندسي الدقيق</span>
+                            <span x-show="solarLoading" class="animate-spin inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full"></span>
+                        </button>
+                    </div>
+
+                    <!-- Right: Results Dashboard -->
+                    <div class="lg:col-span-7 space-y-5">
+                        
+                        <!-- Top Summary Banner -->
+                        <div class="glass-panel p-6 rounded-3xl border-slate-800 bg-gradient-to-r from-slate-900 to-slate-900/90 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                            <div>
+                                <span class="text-xs text-slate-400 block">إجمالي الطاقة المخزنة المطلوبة (Total Energy)</span>
+                                <span class="text-2xl sm:text-3xl font-black text-white" x-text="(solarResult.daily_energy_wh ? (solarResult.daily_energy_wh / 1000).toFixed(2) : '4.00') + ' kWh'"></span>
+                            </div>
+                            <button @click="openSolarOrderModal()" class="w-full sm:w-auto px-6 py-3 rounded-xl font-bold text-xs sm:text-sm bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-lg shadow-emerald-500/20 transition flex items-center justify-center gap-1.5">
+                                <span>اطلب تنفيذ هذه المنظومة الآن ☀️</span>
+                            </button>
+                        </div>
+
+                        <!-- 4 Engineering Cards Grid -->
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            
+                            <!-- Card 1: Inverter -->
+                            <div class="glass-panel p-5 rounded-2xl border-slate-800 hover:border-cyan-500/40 transition">
+                                <div class="flex items-center justify-between mb-2">
+                                    <span class="text-xs font-bold text-cyan-400">🔌 قدرة الإنفرتر (Inverter)</span>
+                                    <span class="text-xs px-2 py-0.5 rounded bg-slate-800 text-slate-400">+30% أمان</span>
+                                </div>
+                                <div class="text-2xl font-black text-white mb-1" x-text="(solarResult.recommended_inverter_va || 2000) + ' VA'"></div>
+                                <div class="text-xs text-slate-400 space-y-1">
+                                    <div>القدرة المستمرة: <span class="text-slate-200 font-semibold" x-text="(solarResult.inverter_continuous_w || 1300) + ' W'"></span></div>
+                                    <div>تيار الإقلاع (Surge Peak): <span class="text-slate-200 font-semibold" x-text="(solarResult.surge_watts || 2000) + ' W'"></span></div>
+                                </div>
+                            </div>
+
+                            <!-- Card 2: Batteries -->
+                            <div class="glass-panel p-5 rounded-2xl border-slate-800 hover:border-emerald-500/40 transition">
+                                <div class="flex items-center justify-between mb-2">
+                                    <span class="text-xs font-bold text-emerald-400">🔋 بنك البطاريات (Battery Bank)</span>
+                                    <span class="text-xs px-2 py-0.5 rounded bg-slate-800 text-slate-400" x-text="solarForm.system_voltage + 'V'"></span>
+                                </div>
+                                <div class="text-2xl font-black text-white mb-1" x-text="(solarResult.battery_bank_ah_lead || 392) + ' Ah'"></div>
+                                <div class="text-xs text-slate-400 space-y-1">
+                                    <div>بطاريات Gel (12V 200Ah): <span class="text-emerald-300 font-bold" x-text="(solarResult.total_batteries_200ah || 4) + ' بطاريات'"></span></div>
+                                    <div>بديل الليثيوم LiFePO4: <span class="text-slate-200 font-semibold" x-text="(solarResult.battery_bank_ah_lithium || 230) + ' Ah'"></span></div>
+                                </div>
+                            </div>
+
+                            <!-- Card 3: Solar Panels -->
+                            <div class="glass-panel p-5 rounded-2xl border-slate-800 hover:border-amber-500/40 transition">
+                                <div class="flex items-center justify-between mb-2">
+                                    <span class="text-xs font-bold text-amber-400">☀️ الألواح الشمسية (PV Array)</span>
+                                    <span class="text-xs px-2 py-0.5 rounded bg-slate-800 text-slate-400" x-text="solarForm.panel_wattage + 'W اللوح'"></span>
+                                </div>
+                                <div class="text-2xl font-black text-white mb-1" x-text="(solarResult.panels_count || 3) + ' ألواح'"></div>
+                                <div class="text-xs text-slate-400 space-y-1">
+                                    <div>إجمالي القدرة المركبة: <span class="text-amber-300 font-bold" x-text="(solarResult.actual_pv_watts || 1200) + ' W'"></span></div>
+                                    <div>الصافي المطلوب: <span class="text-slate-200 font-semibold" x-text="(solarResult.required_pv_watts || 1066) + ' W'"></span></div>
+                                </div>
+                            </div>
+
+                            <!-- Card 4: MPPT -->
+                            <div class="glass-panel p-5 rounded-2xl border-slate-800 hover:border-indigo-500/40 transition">
+                                <div class="flex items-center justify-between mb-2">
+                                    <span class="text-xs font-bold text-indigo-400">⚡ منظم الشحن (MPPT)</span>
+                                    <span class="text-xs px-2 py-0.5 rounded bg-slate-800 text-slate-400">كفاءة عالية</span>
+                                </div>
+                                <div class="text-2xl font-black text-white mb-1" x-text="(solarResult.mppt_current_amps || 60) + ' Ampere'"></div>
+                                <div class="text-xs text-slate-400 space-y-1">
+                                    <div>الجهد المتوافق: <span class="text-slate-200 font-semibold" x-text="solarForm.system_voltage + ' Volt DC'"></span></div>
+                                    <div>معامل الأمان الكهربائي: <span class="text-indigo-300 font-bold">125% Standard</span></div>
+                                </div>
+                            </div>
+
+                        </div>
+
+                        <!-- Technical Footnote -->
+                        <div class="p-4 rounded-2xl bg-slate-800/40 border border-slate-800 text-xs text-slate-400 flex items-center gap-2">
+                            <span class="text-cyan-400 font-bold">ℹ️ ملاحظة هندسية:</span>
+                            <span>تم احتساب ساعات سطوع الشمس بمعدل 5.0 ساعات PSH ومعامل فقد حراري وتوصيل 25% المعتمد في فلسطين والشرق الأوسط.</span>
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </div>
+        </section>
+
+        <!-- Enterprise OS Features Section -->
+        <section id="features" class="py-20 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center mb-14">
+                <h2 class="text-xs font-bold text-cyan-400 tracking-wider uppercase mb-2">القوة الهندسية والأمن التقني</h2>
+                <h3 class="text-3xl sm:text-4xl font-extrabold text-white">معمارية متطورة تلبي أعلى المعايير المؤسسية</h3>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                <div class="glass-panel p-8 rounded-3xl border-slate-800 hover:border-cyan-500/30 transition">
+                    <div class="w-12 h-12 rounded-2xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400 mb-6 font-bold text-xl">
+                        🔒
+                    </div>
+                    <h4 class="text-xl font-bold text-white mb-3">حتمية تامة بدون هلوسة (Zero-Hallucination)</h4>
+                    <p class="text-sm text-slate-400 leading-relaxed">
+                        عزل العمليات الحسابية والشبكية في دوال بايثون حتمية، مما يمنع الذكاء الاصطناعي من تخمين سعات البطاريات أو إعدادات جدار حماية MikroTik.
+                    </p>
+                </div>
+
+                <div class="glass-panel p-8 rounded-3xl border-slate-800 hover:border-emerald-500/30 transition">
+                    <div class="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 mb-6 font-bold text-xl">
+                        📡
+                    </div>
+                    <h4 class="text-xl font-bold text-white mb-3">توجيه هجين فائق الذكاء (Hybrid Smart Router)</h4>
+                    <p class="text-sm text-slate-400 leading-relaxed">
+                        تكامل سلس بين Ollama المحلي للأداء الاقتصادي السريع وOpenRouter للمهام البرمجية العميقة مع نظام Fallback تلقائي لحظي.
+                    </p>
+                </div>
+
+                <div class="glass-panel p-8 rounded-3xl border-slate-800 hover:border-indigo-500/30 transition">
+                    <div class="w-12 h-12 rounded-2xl bg-indigo-500/10 border border-indigo-500/30 flex items-center justify-center text-indigo-400 mb-6 font-bold text-xl">
+                        🛡️
+                    </div>
+                    <h4 class="text-xl font-bold text-white mb-3">طابور الموافقات المباشر (Approval Queue)</h4>
+                    <p class="text-sm text-slate-400 leading-relaxed">
+                        كل طلب أو إجراء حساس يخضع لموافقة بشرية عبر تيليجرام قبل التنفيذ، لضمان السيطرة التامة والجودة قبل تسليم أي مشروع.
+                    </p>
+                </div>
+            </div>
+        </section>
+
+        <!-- CTA & Contact Section -->
+        <section id="contact" class="py-20 bg-gradient-to-b from-slate-900 to-darkBg border-t border-slate-800/80">
+            <div class="max-w-4xl mx-auto px-4 text-center">
+                <h3 class="text-3xl sm:text-4xl font-extrabold text-white mb-4">جاهز لنقل مشروعك إلى المستوى التقني التالي؟</h3>
+                <p class="text-slate-400 text-sm sm:text-base mb-8 max-w-xl mx-auto">
+                    سواء كنت تبحث عن نظام شامل POS المكتبي، أو ترغب في تصميم شبكة ميكروتك مؤمنة، نحن جاهزون للتنفيذ فوراً.
+                </p>
+                <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
+                    <button @click="openOrderModal('استشارة عامة ومباشرة')" class="w-full sm:w-auto px-8 py-4 rounded-xl font-bold bg-gradient-to-r from-cyan-500 to-emerald-500 hover:from-cyan-400 hover:to-emerald-400 text-slate-950 shadow-xl shadow-cyan-500/20 transition">
+                        تواصل معنا واحجز استشارتك الآن
+                    </button>
+                    <a href="https://t.me/AdhamAlhabbash" target="_blank" class="w-full sm:w-auto px-8 py-4 rounded-xl font-bold glass-panel hover:bg-slate-800 text-white border border-slate-700 transition">
+                        المحادثة عبر تيليجرام 💬
+                    </a>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="glass-panel border-t border-slate-800 py-10">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-400">
+            <div>
+                © 2026 المهندس أدهم الهباش (Eng. Adham Alhabbash). جميع الحقوق محفوظة.
+            </div>
+            <div class="flex items-center space-x-6 space-x-reverse font-medium">
+                <a href="#services" class="hover:text-cyan-400 transition">المنتجات</a>
+                <a href="#solar-calculator" class="hover:text-cyan-400 transition">حاسبة الطاقة</a>
+                <a href="https://github.com/adham-agent" target="_blank" class="hover:text-cyan-400 transition">GitHub</a>
+                <a href="https://wa.me/970599000000" target="_blank" class="hover:text-emerald-400 transition">واتساب مباشر</a>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Client Order / Service Request Modal -->
+    <div x-show="showOrderModal" x-cloak class="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
+        <div @click.away="showOrderModal = false" class="glass-panel bg-slate-900 border border-slate-700 w-full max-w-lg rounded-3xl p-6 sm:p-8 shadow-2xl relative text-right">
+            
+            <button @click="showOrderModal = false" class="absolute top-5 left-5 text-slate-400 hover:text-white transition text-lg font-bold">
+                ✕
+            </button>
+
+            <div class="mb-6">
+                <span class="text-xs font-bold text-cyan-400 uppercase tracking-wider block mb-1">طلب خدمة / شراء منتج</span>
+                <h3 class="text-2xl font-black text-white">تأكيد تفاصيل الطلب</h3>
+                <p class="text-xs sm:text-sm text-slate-400 mt-1">سيتم إرسال تنبيه فوري للمهندس أدهم والتواصل معك خلال دقائق.</p>
+            </div>
+
+            <!-- Form -->
+            <form @submit.prevent="submitOrder">
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-300 mb-1.5">اسمك الكريم أو اسم المنشأة *</label>
+                        <input type="text" x-model="orderForm.client_name" required placeholder="مثال: أحمد خليل - شركة النور" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-cyan-500 transition">
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-300 mb-1.5">رقم الواتساب أو الجوال للتواصل *</label>
+                        <input type="tel" x-model="orderForm.phone_whatsapp" required placeholder="مثال: 0599123456 أو +970599123456" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-cyan-500 transition text-left" dir="ltr">
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-300 mb-1.5">الخدمة أو المنتج المختار *</label>
+                        <input type="text" x-model="orderForm.service_or_product" required class="w-full bg-slate-800/80 border border-slate-700 rounded-xl px-4 py-3 text-sm text-cyan-300 font-semibold focus:outline-none">
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-300 mb-1.5">ملاحظات أو تفاصيل إضافية (اختياري)</label>
+                        <textarea x-model="orderForm.details" rows="3" placeholder="اكتب أي استفسار أو متطلبات خاصة هنا..." class="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-cyan-500 transition"></textarea>
+                    </div>
+                </div>
+
+                <!-- Submit Button / State -->
+                <div class="mt-6">
+                    <button type="submit" :disabled="orderSubmitting" class="w-full py-4 rounded-xl font-bold bg-gradient-to-r from-cyan-500 to-emerald-500 hover:from-cyan-400 hover:to-emerald-400 text-slate-950 text-sm shadow-xl shadow-cyan-500/20 transition flex items-center justify-center gap-2">
+                        <span x-show="!orderSubmitting">إرسال الطلب والتواصل فوراً 🚀</span>
+                        <span x-show="orderSubmitting" class="animate-spin inline-block w-4 h-4 border-2 border-slate-950 border-t-transparent rounded-full"></span>
+                    </button>
+                </div>
+            </form>
+
+            <!-- Success Overlay inside Modal -->
+            <div x-show="orderSuccess" x-cloak class="absolute inset-0 bg-slate-900/95 rounded-3xl p-8 flex flex-col items-center justify-center text-center">
+                <div class="w-16 h-16 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 flex items-center justify-center text-3xl mb-4">
+                    ✓
+                </div>
+                <h4 class="text-2xl font-bold text-white mb-2">تم استلام طلبك بنجاح!</h4>
+                <p class="text-sm text-slate-300 mb-6" x-text="orderSuccessMessage"></p>
+                <div class="flex flex-col sm:flex-row gap-3 w-full">
+                    <a :href="directWaLink" target="_blank" class="flex-1 py-3 px-4 rounded-xl font-bold text-sm bg-emerald-500 hover:bg-emerald-400 text-slate-950 transition text-center">
+                        مراسلة المهندس عبر واتساب فوراً 💬
+                    </a>
+                    <button @click="showOrderModal = false; orderSuccess = false" class="py-3 px-4 rounded-xl font-semibold text-sm bg-slate-800 text-slate-300 hover:text-white transition">
+                        إغلاق
+                    </button>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Alpine.js Store and Controller -->
+    <script>
+        function agencyStore() {
+            return {
+                selectedCategory: 'all',
+                showOrderModal: false,
+                orderSubmitting: false,
+                orderSuccess: false,
+                orderSuccessMessage: '',
+                directWaLink: '#',
+                
+                // Order Form
+                orderForm: {
+                    client_name: '',
+                    phone_whatsapp: '',
+                    service_or_product: '',
+                    details: ''
+                },
+
+                // Solar Calculator State
+                solarLoading: false,
+                solarTimeout: null,
+                solarForm: {
+                    load_watts: 1000,
+                    backup_hours: 4,
+                    system_voltage: 24,
+                    panel_wattage: 400
+                },
+                solarResult: {
+                    daily_energy_wh: 4000,
+                    inverter_continuous_w: 1300,
+                    recommended_inverter_va: 2000,
+                    surge_watts: 2000,
+                    battery_bank_ah_lead: 392.2,
+                    battery_bank_ah_lithium: 230.7,
+                    total_batteries_200ah: 4,
+                    panels_count: 3,
+                    actual_pv_watts: 1200,
+                    required_pv_watts: 1066.7,
+                    mppt_current_amps: 63
+                },
+
+                init() {
+                    this.calculateSolar();
+                },
+
+                openOrderModal(serviceName, prefillDetails = '') {
+                    this.orderForm.service_or_product = serviceName;
+                    this.orderForm.details = prefillDetails;
+                    this.orderSuccess = false;
+                    this.showOrderModal = true;
+                },
+
+                openSolarOrderModal() {
+                    const details = `مواصفات المنظومة المحسوبة:\n` +
+                        `- الحمل: ${this.solarForm.load_watts}W | ساعات التشغيل: ${this.solarForm.backup_hours}h\n` +
+                        `- الإنفرتر: ${this.solarResult.recommended_inverter_va}VA\n` +
+                        `- البطاريات: ${this.solarResult.total_batteries_200ah} بطاريات 200Ah (أو ${this.solarResult.battery_bank_ah_lithium}Ah ليثيوم)\n` +
+                        `- الألواح: ${this.solarResult.panels_count} ألواح قدرة ${this.solarForm.panel_wattage}W`;
+                    this.openOrderModal('تنفيذ منظومة طاقة شمسية مخصصة', details);
+                },
+
+                calculateSolarDebounced() {
+                    clearTimeout(this.solarTimeout);
+                    this.solarTimeout = setTimeout(() => {
+                        this.calculateSolar();
+                    }, 250);
+                },
+
+                async calculateSolar() {
+                    this.solarLoading = true;
+                    try {
+                        const res = await fetch('/api/calc-solar', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(this.solarForm)
+                        });
+                        if (res.ok) {
+                            const json = await res.json();
+                            this.solarResult = json.data;
+                        }
+                    } catch (e) {
+                        console.error('Solar calculation failed', e);
+                    } finally {
+                        this.solarLoading = false;
+                    }
+                },
+
+                async submitOrder() {
+                    if (!this.orderForm.client_name || !this.orderForm.phone_whatsapp) return;
+                    this.orderSubmitting = true;
+
+                    try {
+                        const res = await fetch('/api/order', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(this.orderForm)
+                        });
+
+                        const json = await res.json();
+                        if (res.ok && json.status === 'success') {
+                            this.orderSuccessMessage = json.message || 'تم تسجيل طلبك بنجاح!';
+                            
+                            // Setup direct WhatsApp link
+                            let cleanPhone = this.orderForm.phone_whatsapp.replace(/\D/g, '');
+                            if (cleanPhone.startsWith('059') || cleanPhone.startsWith('056')) {
+                                cleanPhone = '970' + cleanPhone.substring(1);
+                            }
+                            this.directWaLink = cleanPhone ? `https://wa.me/${cleanPhone}` : 'https://wa.me/970599000000';
+                            
+                            this.orderSuccess = true;
+                            this.orderForm.client_name = '';
+                            this.orderForm.phone_whatsapp = '';
+                            this.orderForm.details = '';
+                        } else {
+                            alert(json.detail || 'حدث خطأ أثناء إرسال الطلب. يرجى المحاولة مرة أخرى.');
+                        }
+                    } catch (e) {
+                        alert('تعذر الاتصال بالخادم. يرجى التحقق من اتصالك بالإنترنت.');
+                    } finally {
+                        this.orderSubmitting = false;
+                    }
+                }
+            };
+        }
+    </script>
+</body>
+</html>

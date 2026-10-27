@@ -1,0 +1,126 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ranking format (tier list) template</title>
+<style>
+@font-face{font-family:"Cairo";font-weight:400;src:url(../fonts/Cairo-Regular.ttf) format("truetype")}
+@font-face{font-family:"Cairo";font-weight:700;src:url(../fonts/Cairo-Bold.ttf) format("truetype")}
+@font-face{font-family:"Cairo";font-weight:900;src:url(../fonts/Cairo-Black.ttf) format("truetype")}
+html,body{margin:0;background:#111;height:100%}body{display:flex;align-items:center;justify-content:center}
+canvas{display:block;max-width:100vw;max-height:100vh;width:auto;height:auto}body.render canvas{max-width:none;max-height:none}</style>
+</head><body><canvas id="c"></canvas>
+<script>
+if (new URLSearchParams(location.search).has('render')) document.body.classList.add('render');
+// ===== DEFAULTS (override with URL params or render.py --data plan.json) =====
+const DEFAULT_DUR = 8;
+const DEFAULT_DATA = {
+  title: 'أفضل المنصات لجلب العملاء',
+  tiers: ['S', 'A', 'B', 'C', 'D', 'F'],
+  items: [
+    { label: 'لينكدإن', tier: 'S', t: 0.8 },
+    { label: 'إنستجرام', tier: 'A', t: 2.0 },
+    { label: 'يوتيوب', tier: 'S', t: 3.2 },
+    { label: 'تيك توك', tier: 'B', t: 4.4 },
+    { label: 'فيسبوك', tier: 'C', t: 5.6 },
+  ],
+};
+const DEFAULT_COLORS = { bg: '#f5f5f5', ink: '#151515', card: '#ffffff', strip: '#e8e8e8', c1: '#151515',
+  S: '#ff6b6b', A: '#ffa94d', B: '#ffd43b', C: '#69db7c', D: '#4dabf7', E: '#9775fa', F: '#f783ac' };
+// ---- shared harness ----
+const P = new URLSearchParams(location.search);
+const W = +(P.get('w') || 1080), H = +(P.get('h') || 1920);
+const DUR = +(P.get('dur') || DEFAULT_DUR);
+const ALPHA = P.get('alpha') === '1';
+const FONT = (P.get('font') ? `"${P.get('font')}",` : '') + '"Cairo","Noto Sans Arabic","Segoe UI",Tahoma,Arial,sans-serif';
+let DATA = DEFAULT_DATA;
+if (P.get('data')) DATA = JSON.parse(decodeURIComponent(escape(atob(P.get('data').replace(/-/g, '+').replace(/_/g, '/')))));
+if (P.get('text')) DATA = Object.assign({}, DATA, { title: P.get('text') });
+const COL = Object.assign({}, DEFAULT_COLORS);
+for (const k in COL) if (P.get(k)) COL[k] = '#' + P.get(k).replace('#', '');
+const cv = document.getElementById('c'); cv.width = W; cv.height = H;
+const ctx = cv.getContext('2d');
+const U = Math.min(W, H);
+const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
+const easeOutBack = x => { const c1 = 1.5, c3 = c1 + 1; return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2); };
+const easeOut = x => 1 - Math.pow(1 - x, 3);
+
+function rr(x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
+function fitFont(text, maxW, size, weight = 800) {
+  let s = size; ctx.font = `${weight} ${s}px ${FONT}`;
+  while (ctx.measureText(text).width > maxW && s > 10) { s -= 2; ctx.font = `${weight} ${s}px ${FONT}`; }
+  return s;
+}
+
+const tiers = DATA.tiers || ['S', 'A', 'B', 'C', 'D', 'F'];
+const rtl = /[؀-ۿ]/.test((DATA.title || '') + (DATA.items || []).map(i => i.label).join(''));
+// Layout: title band on top, then one row per tier.
+const pad = U * 0.05;
+const titleH = H > W ? H * 0.16 : H * 0.18;
+const tableY = titleH + pad * 0.4, tableH = H - tableY - pad;
+const rowH = tableH / tiers.length;
+const labelW = Math.min(rowH * 1.05, W * 0.18);
+const cardH = rowH * 0.78, cardW = cardH * 1.55;
+
+// Slot of each item inside its row, in order of appearance.
+const placed = (DATA.items || []).slice().sort((a, b) => a.t - b.t).map((it, i, all) => {
+  const before = all.slice(0, i).filter(o => o.tier === it.tier).length;
+  return Object.assign({}, it, { slot: before });
+});
+
+function draw(t) {
+  ctx.clearRect(0, 0, W, H);
+  if (!ALPHA) { ctx.fillStyle = COL.bg; ctx.fillRect(0, 0, W, H); }
+  // title
+  const tIn = easeOut(clamp(t / 0.5));
+  ctx.save(); ctx.globalAlpha = tIn; ctx.fillStyle = COL.ink; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.direction = rtl ? 'rtl' : 'ltr';
+  fitFont(DATA.title || '', W - pad * 2, titleH * 0.36, 900);
+  ctx.fillText(DATA.title || '', W / 2, titleH * 0.55 + (1 - tIn) * 20);
+  ctx.restore();
+  // rows
+  tiers.forEach((tier, r) => {
+    const y = tableY + r * rowH;
+    const rIn = easeOut(clamp((t - 0.1 - r * 0.06) / 0.4));
+    ctx.save(); ctx.globalAlpha = rIn;
+    const lx = rtl ? W - pad - labelW : pad;
+    ctx.fillStyle = COL[tier] || COL.c1; rr(lx, y + 4, labelW, rowH - 8, U * 0.018); ctx.fill();
+    ctx.fillStyle = COL.ink; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = `900 ${rowH * 0.42}px ${FONT}`; ctx.fillText(tier, lx + labelW / 2, y + rowH / 2 + 2);
+    const bx = rtl ? pad : pad + labelW + U * 0.012;
+    ctx.fillStyle = COL.strip; rr(bx, y + 4, W - pad * 2 - labelW - U * 0.012, rowH - 8, U * 0.018); ctx.fill();
+    ctx.restore();
+  });
+  // cards drop in
+  for (const it of placed) {
+    const k = clamp((t - it.t) / 0.55);
+    if (k <= 0) continue;
+    const r = Math.max(0, tiers.indexOf(it.tier));
+    const rowY = tableY + r * rowH + (rowH - cardH) / 2;
+    const gap = U * 0.014;
+    const first = rtl ? W - pad - labelW - U * 0.012 - gap - cardW : pad + labelW + U * 0.012 + gap;
+    const x = rtl ? first - it.slot * (cardW + gap) : first + it.slot * (cardW + gap);
+    const y = -cardH * 1.4 + (rowY + cardH * 1.4) * easeOutBack(k);
+    const rot = (1 - easeOut(k)) * (it.slot % 2 ? 0.12 : -0.12);
+    ctx.save(); ctx.translate(x + cardW / 2, y + cardH / 2); ctx.rotate(rot);
+    ctx.shadowColor = 'rgba(0,0,0,0.18)'; ctx.shadowBlur = U * 0.02; ctx.shadowOffsetY = U * 0.008;
+    ctx.fillStyle = COL.card; rr(-cardW / 2, -cardH / 2, cardW, cardH, U * 0.02); ctx.fill();
+    ctx.shadowColor = 'transparent';
+    ctx.strokeStyle = COL[it.tier] || COL.c1; ctx.lineWidth = U * 0.006; ctx.stroke();
+    ctx.fillStyle = COL.ink; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.direction = rtl ? 'rtl' : 'ltr';
+    fitFont(it.label, cardW * 0.86, cardH * 0.3, 800);
+    ctx.fillText(it.label, 0, 2);
+    ctx.restore();
+  }
+}
+// ---- shared harness foot ----
+window.__dur = DUR;
+// Expose renderFrame only once the fonts are loaded, so the first frame is never drawn in a fallback font.
+const FAMILY = FONT.split(',')[0].replace(/"/g, '');
+Promise.all([400, 700, 800, 900].map(w => document.fonts.load(`${w} 40px "${FAMILY}"`).catch(() => null)))
+  .then(() => { window.renderFrame = t => { draw(t); return true; }; });
+if (!P.has('render')) {
+  const t0 = performance.now();
+  const loop = () => { draw(((performance.now() - t0) / 1000) % DUR); requestAnimationFrame(loop); };
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(loop); else loop();
+}
+</script>
+</body></html>

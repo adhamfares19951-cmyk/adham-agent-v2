@@ -2,14 +2,126 @@
 Features:
 - markdown_to_telegram_html: converts Markdown to rich Telegram HTML (bold, italic, code blocks, blockquotes, links).
 - send_long: splits long messages safely and sends with HTML formatting, falling back to plain text if needed.
+- escape_markdown: escapes Telegram legacy Markdown characters.
+- clean_for_markdown: strips/sanitizes problematic formatting characters from dynamic text.
+- safe_edit_message_text: robust callback query message editor with automatic parse_mode=None fallback.
+- safe_reply_text: robust message replier with automatic parse_mode=None fallback.
 """
 import html
 import logging
 import re
+from typing import Any
 from telegram import Update
 
 log = logging.getLogger("tg_utils")
 TG_LIMIT = 3900  # Telegram max is 4096, keep a safety margin for HTML tags
+
+
+def escape_markdown(text: str) -> str:
+    """Safely escapes Telegram legacy Markdown special characters (_ * ` [)."""
+    if not text:
+        return ""
+    return re.sub(r"([_*`\[])", r"\\\1", str(text))
+
+
+def clean_for_markdown(text: str) -> str:
+    """Removes or replaces problematic formatting characters from raw text.
+    Replaces underscores with spaces, removes asterisks and backticks.
+    Ideal for fields like action_type, business names, or descriptions.
+    """
+    if not text:
+        return ""
+    return str(text).replace("_", " ").replace("*", "").replace("`", "")
+
+
+async def safe_edit_message_text(
+    query: Any,
+    text: str,
+    reply_markup: Any = None,
+    parse_mode: str | None = "Markdown",
+    **kwargs: Any,
+) -> Any:
+    """Safely edits a Telegram callback query message.
+    If Telegram raises BadRequest due to entity parsing errors,
+    it automatically falls back to plain text (parse_mode=None).
+    """
+    try:
+        return await query.edit_message_text(
+            text=text,
+            reply_markup=reply_markup,
+            parse_mode=parse_mode,
+            **kwargs,
+        )
+    except Exception as e:
+        err_str = str(e).lower()
+        if "message is not modified" in err_str:
+            return None
+        if parse_mode is not None and ("can't parse" in err_str or "entity" in err_str or "bad request" in err_str):
+            log.warning(
+                "Telegram edit_message_text failed with parse_mode=%s (%s). Retrying with parse_mode=None...",
+                parse_mode, e
+            )
+            try:
+                plain_text = text.replace("**", "").replace("*", "").replace("`", "")
+                return await query.edit_message_text(
+                    text=plain_text,
+                    reply_markup=reply_markup,
+                    parse_mode=None,
+                    **kwargs,
+                )
+            except Exception as e2:
+                if "message is not modified" in str(e2).lower():
+                    return None
+                log.warning("safe_edit_message_text fallback edit failed: %s. Attempting new reply...", e2)
+        # Fallback to replying if edit is completely rejected
+        try:
+            plain_text = text.replace("**", "").replace("*", "").replace("`", "")
+            return await query.message.reply_text(
+                text=plain_text,
+                reply_markup=reply_markup,
+                parse_mode=None,
+                **kwargs,
+            )
+        except Exception as e3:
+            log.error("All safe_edit_message_text attempts failed: %s", e3)
+            return None
+
+
+async def safe_reply_text(
+    message: Any,
+    text: str,
+    reply_markup: Any = None,
+    parse_mode: str | None = "Markdown",
+    **kwargs: Any,
+) -> Any:
+    """Safely sends a message reply. If entity parsing fails, retries with parse_mode=None."""
+    try:
+        return await message.reply_text(
+            text=text,
+            reply_markup=reply_markup,
+            parse_mode=parse_mode,
+            **kwargs,
+        )
+    except Exception as e:
+        err_str = str(e).lower()
+        if parse_mode is not None and ("can't parse" in err_str or "entity" in err_str or "bad request" in err_str):
+            log.warning(
+                "Telegram reply_text failed with parse_mode=%s (%s). Retrying with parse_mode=None...",
+                parse_mode, e
+            )
+            try:
+                plain_text = text.replace("**", "").replace("*", "").replace("`", "")
+                return await message.reply_text(
+                    text=plain_text,
+                    reply_markup=reply_markup,
+                    parse_mode=None,
+                    **kwargs,
+                )
+            except Exception as e2:
+                log.error("safe_reply_text fallback failed: %s", e2)
+                return None
+        log.error("safe_reply_text failed: %s", e)
+        return None
 
 
 def markdown_to_telegram_html(text: str) -> str:

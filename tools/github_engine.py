@@ -228,6 +228,73 @@ def search_repo_code(repo_name: str, pattern: str, limit: int = 15) -> list[dict
     return results
 
 
+async def search_github_worldwide(query: str, language: str = "", sort: str = "stars", limit: int = 6) -> dict[str, Any]:
+    """Search all public GitHub repositories worldwide using GitHub Search API."""
+    q = query.strip()
+    if language:
+        q += f" language:{language}"
+
+    headers = {
+        "User-Agent": "adham-agent-bot/2.0",
+        "Accept": "application/vnd.github.v3+json",
+    }
+    gh_token = os.getenv("GITHUB_TOKEN") or os.getenv("GH_TOKEN")
+    if gh_token:
+        headers["Authorization"] = f"token {gh_token}"
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.get(
+                "https://api.github.com/search/repositories",
+                params={"q": q, "sort": sort, "order": "desc", "per_page": limit},
+                headers=headers
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                items = data.get("items", [])
+                repos = []
+                for item in items:
+                    repos.append({
+                        "name": item.get("full_name"),
+                        "url": item.get("html_url"),
+                        "clone_url": item.get("clone_url"),
+                        "stars": item.get("stargazers_count", 0),
+                        "description": item.get("description", "") or "لا يوجد وصف",
+                        "language": item.get("language") or "غير محدد",
+                        "updated_at": item.get("updated_at", "")[:10],
+                    })
+                return {"success": True, "total_count": data.get("total_count", 0), "repos": repos}
+            else:
+                return {"success": False, "error": f"GitHub API error: {resp.status_code} - {resp.text[:200]}"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+async def _tool_search_github_worldwide(args: dict) -> str:
+    query = str(args.get("query", "")).strip()
+    language = str(args.get("language", "")).strip()
+    if not query:
+        return "يرجى تحديد كلمات البحث عن المستودعات."
+
+    res = await search_github_worldwide(query, language=language)
+    if not res.get("success"):
+        return f"❌ تعذر البحث في GitHub: {res.get('error')}"
+
+    repos = res.get("repos", [])
+    if not repos:
+        return f"لم يتم العثور على أي مستودعات تطابق: '{query}'."
+
+    lines = [f"🌍 **أفضل مستودعات GitHub العالمية المطابقة لـ ({query})** [إجمالي: {res.get('total_count')}]:\n"]
+    for r in repos:
+        lines.append(
+            f"⭐ **[{r['name']}]({r['url']})** (`{r['stars']} ⭐` • {r['language']})\n"
+            f"   📝 {r['description']}\n"
+            f"   📥 أمر التنزيل: `/repo {r['url']}`\n"
+        )
+    lines.append("💡 *اضغط على أمر التنزيل لفكفكة أي مستودع واستخراج أكواده.*")
+    return "\n".join(lines)
+
+
 # Tool definitions
 
 async def _tool_inspect_github_repo(args: dict) -> str:
@@ -348,5 +415,24 @@ TOOLS = [
             "required": ["repo_name", "pattern"],
         },
         "handler": _tool_search_repo_code,
+    },
+    {
+        "name": "search_github_worldwide",
+        "description": "ابحث في ملايين مستودعات GitHub في العالم عن أي مكتبة، مشروع، روبوت، أو كود مفتوح المصدر بالنجوم واللغات والوصف.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "كلمات البحث أو الموضوع (مثال: 'laravel pos' أو 'trading bot python' أو 'telegram automation')",
+                },
+                "language": {
+                    "type": "string",
+                    "description": "لغة البرمجة المفضلة (اختياري، مثل python أو php أو typescript)",
+                },
+            },
+            "required": ["query"],
+        },
+        "handler": _tool_search_github_worldwide,
     },
 ]

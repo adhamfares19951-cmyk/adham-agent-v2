@@ -1,0 +1,1246 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>مقر قيادة أدهم | Adham Command Center</title>
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#0a0f1d">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="AdhamHQ">
+
+  <!-- Fonts & Icons -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.8/dist/cdn.min.js"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Cairo', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'monospace'],
+          },
+          colors: {
+            dark: {
+              950: '#060913',
+              900: '#0a0f1d',
+              850: '#0f172a',
+              800: '#1e293b',
+              700: '#334155'
+            },
+            accent: {
+              cyan: '#06b6d4',
+              sky: '#0284c7',
+              emerald: '#10b981',
+              amber: '#f59e0b',
+              rose: '#f43f5e'
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    body {
+      background-color: #060913;
+      color: #f1f5f9;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+    .glass-card {
+      background: rgba(15, 23, 42, 0.75);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(51, 65, 85, 0.45);
+    }
+    .neon-glow {
+      box-shadow: 0 0 20px -5px rgba(6, 182, 212, 0.35);
+    }
+    /* Hide scrollbar for tabs */
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+  </style>
+</head>
+<body class="min-h-screen pb-24 font-sans selection:bg-accent-cyan selection:text-black antialiased" x-data="hqApp()">
+
+  <!-- Top Fixed Header -->
+  <header class="sticky top-0 z-40 bg-dark-900/90 backdrop-blur-md border-b border-dark-800 px-4 py-3 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <div class="relative">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-accent-sky to-accent-cyan flex items-center justify-center font-black text-black shadow-lg">
+          A
+        </div>
+        <span class="absolute -bottom-0.5 -left-0.5 w-3.5 h-3.5 rounded-full border-2 border-dark-900"
+              :class="wsConnected ? 'bg-accent-emerald animate-pulse' : 'bg-accent-rose'"></span>
+      </div>
+      <div>
+        <h1 class="font-extrabold text-base leading-tight tracking-wide text-white flex items-center gap-2">
+          مقر قيادة أدهم
+          <span class="text-[10px] px-2 py-0.5 rounded-full bg-accent-sky/20 text-accent-cyan font-mono border border-accent-cyan/30">HQ v2.0</span>
+        </h1>
+        <p class="text-xs text-slate-400 font-mono">Windows Server 2025 • <span x-text="wsConnected ? 'متصل حي' : 'إعادة اتصال...'"></span></p>
+      </div>
+    </div>
+    <div class="flex items-center gap-2">
+      <button @click="refreshData()" class="p-2 rounded-xl bg-dark-800 border border-dark-700 text-slate-300 hover:text-white transition active:scale-95">
+        <i data-lucide="refresh-cw" class="w-4 h-4" :class="loading ? 'animate-spin' : ''"></i>
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Content Body -->
+  <main class="max-w-md mx-auto px-4 pt-4 space-y-4">
+
+    <!-- TAB 1: OVERVIEW (الرئيسية) -->
+    <div x-show="activeTab === 'overview'" x-transition class="space-y-4">
+      
+      <!-- Metrics Hero Card -->
+      <div class="glass-card rounded-2xl p-4 neon-glow relative overflow-hidden">
+        <div class="absolute -right-6 -top-6 w-32 h-32 bg-accent-cyan/10 rounded-full blur-2xl"></div>
+        <div class="flex justify-between items-center mb-3">
+          <span class="text-xs font-semibold text-slate-400">مؤشرات السيرفر الحية</span>
+          <span class="text-xs font-mono text-accent-cyan" x-text="'Uptime: ' + telemetry.uptime_hours + 'h'"></span>
+        </div>
+
+        <div class="grid grid-cols-3 gap-2 text-center">
+          <!-- CPU -->
+          <div class="bg-dark-950/60 rounded-xl p-3 border border-dark-700/50">
+            <div class="text-[11px] text-slate-400 mb-1 flex items-center justify-center gap-1">
+              <i data-lucide="cpu" class="w-3.5 h-3.5 text-accent-cyan"></i> المعالج
+            </div>
+            <div class="text-xl font-black font-mono" :class="telemetry.cpu_percent > 85 ? 'text-accent-rose' : 'text-accent-cyan'" x-text="telemetry.cpu_percent + '%'">0%</div>
+            <div class="w-full bg-dark-800 rounded-full h-1.5 mt-2 overflow-hidden">
+              <div class="bg-accent-cyan h-full transition-all duration-500" :style="'width: ' + telemetry.cpu_percent + '%'"></div>
+            </div>
+          </div>
+
+          <!-- RAM -->
+          <div class="bg-dark-950/60 rounded-xl p-3 border border-dark-700/50">
+            <div class="text-[11px] text-slate-400 mb-1 flex items-center justify-center gap-1">
+              <i data-lucide="activity" class="w-3.5 h-3.5 text-accent-sky"></i> الرام
+            </div>
+            <div class="text-xl font-black font-mono text-accent-sky" x-text="telemetry.ram_percent + '%'">0%</div>
+            <div class="text-[10px] text-slate-400 mt-0.5" x-text="telemetry.ram_used_gb + '/' + telemetry.ram_total_gb + ' GB'"></div>
+          </div>
+
+          <!-- DISK -->
+          <div class="bg-dark-950/60 rounded-xl p-3 border border-dark-700/50">
+            <div class="text-[11px] text-slate-400 mb-1 flex items-center justify-center gap-1">
+              <i data-lucide="hard-drive" class="w-3.5 h-3.5 text-accent-emerald"></i> القرص C:
+            </div>
+            <div class="text-xl font-black font-mono text-accent-emerald" x-text="telemetry.disk_free_gb + 'G'">0G</div>
+            <div class="text-[10px] text-slate-400 mt-0.5" x-text="telemetry.disk_percent + '% مستخدم'"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick Actions Bar -->
+      <div class="space-y-2">
+        <h2 class="text-xs font-bold uppercase tracking-wider text-slate-400 px-1">إجراءات سريعة</h2>
+        <div class="grid grid-cols-2 gap-2">
+          <button @click="triggerAction('start_all')" class="glass-card hover:bg-dark-800 p-3 rounded-xl flex items-center gap-3 transition active:scale-95 text-right">
+            <div class="w-9 h-9 rounded-lg bg-accent-emerald/20 text-accent-emerald flex items-center justify-center">
+              <i data-lucide="play" class="w-5 h-5"></i>
+            </div>
+            <div>
+              <div class="text-xs font-bold text-white">تشغيل المنظومة</div>
+              <div class="text-[10px] text-slate-400">إطلاق المشاريع الأساسية</div>
+            </div>
+          </button>
+
+          <button @click="activeTab = 'media'" class="glass-card hover:bg-dark-800 p-3 rounded-xl flex items-center gap-3 transition active:scale-95 text-right">
+            <div class="w-9 h-9 rounded-lg bg-accent-rose/20 text-accent-rose flex items-center justify-center">
+              <i data-lucide="video" class="w-5 h-5"></i>
+            </div>
+            <div>
+              <div class="text-xs font-bold text-white">فيديو فوري</div>
+              <div class="text-[10px] text-slate-400">إنتاج ونشر سريع</div>
+            </div>
+          </button>
+        </div>
+      </div>
+
+      <!-- Direct Upload Card (Bypass Telegram Limits) -->
+      <div class="glass-card p-3 rounded-xl space-y-2">
+        <div class="flex justify-between items-center">
+          <div class="flex items-center gap-2">
+            <div class="w-7 h-7 rounded-lg bg-accent-sky/20 text-accent-cyan flex items-center justify-center">
+              <i data-lucide="upload-cloud" class="w-4 h-4"></i>
+            </div>
+            <div>
+              <div class="text-xs font-bold text-white">رفع وفحص ملف (بدون حد 20MB)</div>
+              <div class="text-[10px] text-slate-400">تطبيقات APK، ملفات ZIP، كود وسجلات</div>
+            </div>
+          </div>
+          <label class="cursor-pointer px-3 py-1 bg-accent-cyan hover:bg-accent-cyan/90 text-black font-bold text-xs rounded-lg active:scale-95 transition flex items-center gap-1">
+            <span x-text="uploadLoading ? 'جاري الرفع...' : 'رفع وفحص'"></span>
+            <input type="file" @change="uploadFile($event)" class="hidden">
+          </label>
+        </div>
+
+        <!-- Inspection Result Card -->
+        <div x-show="uploadResult" class="p-3 bg-dark-950 rounded-lg border border-dark-700 text-xs space-y-1.5" x-transition>
+          <div class="font-bold text-accent-cyan flex items-center justify-between">
+            <span x-text="'✅ ' + uploadResult?.file_name + ' (' + uploadResult?.size_mb + ' MB)'"></span>
+            <span class="text-[10px] px-1.5 py-0.5 rounded bg-dark-800 text-slate-300 font-mono" x-text="uploadResult?.type"></span>
+          </div>
+          <template x-if="uploadResult?.analysis">
+            <div class="space-y-1 text-slate-300">
+              <div>🛠️ التقنيات: <strong class="text-accent-emerald" x-text="uploadResult.analysis.tech_stack?.join(', ') || 'Native Java/Kotlin'"></strong></div>
+              <div>📦 حزم DEX: <span x-text="uploadResult.analysis.dex_count"></span> | الصلاحيات الحساسة: <span x-text="uploadResult.analysis.dangerous_permissions?.length || 0"></span></div>
+            </div>
+          </template>
+        </div>
+      </div>
+
+      <!-- Active Services Status -->
+      <div class="space-y-2">
+        <div class="flex justify-between items-center px-1">
+          <h2 class="text-xs font-bold uppercase tracking-wider text-slate-400">حالة الخدمات الحية</h2>
+          <button @click="activeTab = 'projects'" class="text-xs text-accent-cyan hover:underline">عرض الكل</button>
+        </div>
+        <div class="space-y-2">
+          <template x-for="p in projects.slice(0, 4)" :key="p.id">
+            <div class="glass-card p-3 rounded-xl flex items-center justify-between">
+              <div class="flex items-center gap-3">
+                <span class="w-2.5 h-2.5 rounded-full" :class="p.status === 'RUNNING' ? 'bg-accent-emerald shadow-[0_0_8px_#10b981]' : 'bg-slate-600'"></span>
+                <div>
+                  <div class="text-xs font-bold text-slate-200" x-text="p.name"></div>
+                  <div class="text-[10px] text-slate-400 font-mono" x-text="p.project_type + (p.port ? ' • :' + p.port : '')"></div>
+                </div>
+              </div>
+              <div class="flex items-center gap-1.5">
+                <button x-show="p.status !== 'RUNNING'" @click="controlProject(p.id, 'start')" class="px-2.5 py-1 rounded-lg bg-accent-sky/20 border border-accent-sky/40 text-accent-cyan text-xs font-semibold active:scale-90 transition">تشغيل</button>
+                <button x-show="p.status === 'RUNNING'" @click="controlProject(p.id, 'stop')" class="px-2.5 py-1 rounded-lg bg-accent-rose/20 border border-accent-rose/40 text-accent-rose text-xs font-semibold active:scale-90 transition">إيقاف</button>
+              </div>
+            </div>
+          </template>
+        </div>
+      </div>
+
+      <!-- Live Blackboard Stats -->
+      <div class="glass-card p-3 rounded-xl flex items-center justify-around text-center">
+        <div>
+          <div class="text-lg font-black text-white" x-text="telemetry.counts?.total_videos || 0">0</div>
+          <div class="text-[10px] text-slate-400">فيديوهات مجهزة</div>
+        </div>
+        <div class="h-6 w-px bg-dark-700"></div>
+        <div>
+          <div class="text-lg font-black text-accent-cyan" x-text="telemetry.counts?.total_leads || 0">0</div>
+          <div class="text-[10px] text-slate-400">عملاء وفرص</div>
+        </div>
+        <div class="h-6 w-px bg-dark-700"></div>
+        <div>
+          <div class="text-lg font-black text-accent-emerald" x-text="telemetry.counts?.pending_tasks || 0">0</div>
+          <div class="text-[10px] text-slate-400">مهام قيد الانتظار</div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- TAB 2: PROJECTS (المشاريع والخدمات) -->
+    <div x-show="activeTab === 'projects'" x-transition class="space-y-3">
+      <div class="flex justify-between items-center px-1">
+        <h2 class="text-sm font-bold text-white">إدارة مشاريع السيرفر (7)</h2>
+        <span class="text-xs text-accent-cyan font-mono" x-text="runningProjectsCount() + ' يعمل الآن'"></span>
+      </div>
+
+      <div class="space-y-2.5">
+        <template x-for="p in projects" :key="p.id">
+          <div class="glass-card p-3.5 rounded-xl space-y-2">
+            <div class="flex items-center justify-between">
+              <div>
+                <div class="font-bold text-sm text-white flex items-center gap-2">
+                  <span x-text="p.name"></span>
+                  <span class="text-[10px] px-1.5 py-0.2 rounded bg-dark-800 text-slate-300 font-mono" x-text="p.project_type"></span>
+                </div>
+                <div class="text-xs text-slate-400 font-mono mt-0.5" x-text="p.path"></div>
+              </div>
+              <span class="px-2 py-0.5 rounded-full text-[11px] font-bold"
+                    :class="p.status === 'RUNNING' ? 'bg-accent-emerald/20 text-accent-emerald border border-accent-emerald/40' : 'bg-slate-800 text-slate-400 border border-slate-700'"
+                    x-text="p.status === 'RUNNING' ? 'يعمل' : 'متوقف'"></span>
+            </div>
+
+            <div class="pt-2 border-t border-dark-800 flex items-center justify-between gap-2">
+              <div class="flex items-center gap-1.5">
+                <button x-show="p.status !== 'RUNNING'" @click="controlProject(p.id, 'start')" class="px-3 py-1 bg-accent-sky hover:bg-accent-sky/80 text-white rounded-lg text-xs font-bold flex items-center gap-1 transition active:scale-95">
+                  <i data-lucide="play" class="w-3.5 h-3.5"></i> تشغيل
+                </button>
+                <button x-show="p.status === 'RUNNING'" @click="controlProject(p.id, 'stop')" class="px-3 py-1 bg-accent-rose hover:bg-accent-rose/80 text-white rounded-lg text-xs font-bold flex items-center gap-1 transition active:scale-95">
+                  <i data-lucide="square" class="w-3.5 h-3.5"></i> إيقاف
+                </button>
+                <button @click="controlProject(p.id, 'restart')" class="p-1.5 bg-dark-800 border border-dark-700 text-slate-300 rounded-lg text-xs hover:text-white transition active:scale-95" title="إعادة تشغيل">
+                  <i data-lucide="rotate-cw" class="w-3.5 h-3.5"></i>
+                </button>
+              </div>
+
+              <!-- Laravel Specific Quick Actions -->
+              <div x-show="p.project_type === 'laravel'" class="flex items-center gap-1">
+                <button @click="runArtisan(p.id, 'migrate --force')" class="px-2 py-1 bg-dark-800 border border-dark-700 text-slate-300 hover:text-accent-cyan rounded-lg text-[11px] transition active:scale-95">
+                  Migrate
+                </button>
+                <button @click="runArtisan(p.id, 'optimize:clear')" class="px-2 py-1 bg-dark-800 border border-dark-700 text-slate-300 hover:text-accent-amber rounded-lg text-[11px] transition active:scale-95">
+                  Clear
+                </button>
+              </div>
+            </div>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <!-- TAB 3: MEDIA STUDIO (استوديو الوسائط والفيديوهات) -->
+    <div x-show="activeTab === 'media'" x-transition class="space-y-4">
+      <div class="glass-card p-4 rounded-2xl space-y-3">
+        <h2 class="text-sm font-bold text-white flex items-center gap-2">
+          <i data-lucide="sparkles" class="w-4 h-4 text-accent-cyan"></i>
+          إنتاج فيديو وتعليق صوتي ذكي بضغطة زر
+        </h2>
+
+        <div class="space-y-2">
+          <label class="text-xs text-slate-400">عنوان أو فكرة الفيديو:</label>
+          <input type="text" x-model="mediaForm.topic" placeholder="مثال: لماذا تخسر 90% من المتداولين في الذهب؟"
+                 class="w-full bg-dark-950 border border-dark-700 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-accent-cyan">
+        </div>
+
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="text-xs text-slate-400">الصوت المعلق:</label>
+            <select x-model="mediaForm.voice_name" class="w-full bg-dark-950 border border-dark-700 rounded-xl px-2 py-2 text-xs text-white focus:outline-none focus:border-accent-cyan">
+              <option value="ar-EG-ShakirNeural">شاكر (مصري دافئ واحترافي)</option>
+              <option value="ar-SA-HamedNeural">حامد (سعودي رسمي فخم)</option>
+              <option value="ar-EG-SalmaNeural">سلمى (مصرية شابة متفاعلة)</option>
+            </select>
+          </div>
+          <div>
+            <label class="text-xs text-slate-400">محرك الإخراج:</label>
+            <select x-model="mediaForm.engine" class="w-full bg-dark-950 border border-dark-700 rounded-xl px-2 py-2 text-xs text-white focus:outline-none focus:border-accent-cyan">
+              <option value="remotion">Remotion Studio 4K</option>
+              <option value="cinematic">AI Cinematic Studio</option>
+            </select>
+          </div>
+        </div>
+
+        <button @click="submitMediaJob()" :disabled="mediaLoading || !mediaForm.topic"
+                class="w-full py-2.5 bg-gradient-to-r from-accent-sky to-accent-cyan text-black font-extrabold rounded-xl text-xs flex items-center justify-center gap-2 shadow-lg transition active:scale-95 disabled:opacity-50">
+          <i data-lucide="wand-2" class="w-4 h-4" :class="mediaLoading ? 'animate-spin' : ''"></i>
+          <span x-text="mediaLoading ? 'جاري التأليف والتوليد...' : 'بدء الإنتاج الفوري 🚀'"></span>
+        </button>
+      </div>
+
+      <!-- Latest Pixar Fruit Drama Player Card -->
+      <div class="glass-card p-4 rounded-2xl space-y-3 border border-accent-rose/30">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <span class="text-xl">🍓</span>
+            <div>
+              <h3 class="text-xs font-bold text-white">فيديو دراما الفواكه بيكسار 3D الأصلي (Flux + CGI)</h3>
+              <p class="text-[10px] text-slate-400">الموزة والكمثرى في الصالون وخيانة الفراولة 💔 • 42.7 ثانية • 9:16 Shorts</p>
+            </div>
+          </div>
+          <span class="text-[10px] bg-accent-rose/20 text-accent-rose px-2 py-0.5 rounded-full font-bold">1080x1920</span>
+        </div>
+        <div class="rounded-xl overflow-hidden bg-black/60 border border-dark-700 flex justify-center py-1">
+          <video controls playsinline preload="metadata" class="max-h-[380px] w-auto rounded-lg shadow-2xl" poster="/media/flux_pixar_result.jpg" src="/media/pixar_3d_fruit_drama.mp4"></video>
+        </div>
+        <div class="flex gap-2">
+          <a href="/media/pixar_3d_fruit_drama.mp4" download="pixar_3d_fruit_drama.mp4" class="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-accent-rose to-accent-pink hover:opacity-90 text-center text-xs font-bold text-white transition flex items-center justify-center gap-1.5 shadow-lg shadow-rose-950/40">
+            <i data-lucide="download" class="w-4 h-4"></i>
+            تحميل فيديو بيكسار 3D كامل للجوال (MP4 HD)
+          </a>
+        </div>
+      </div>
+
+      <!-- Recent Media Production Jobs -->
+      <div class="space-y-2">
+        <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400 px-1">سجل الإنتاج والوسائط</h3>
+        <div class="space-y-2">
+          <template x-for="job in mediaQueue" :key="job.id">
+            <div class="glass-card p-3 rounded-xl space-y-2">
+              <div class="flex items-center justify-between">
+                <div class="font-bold text-xs text-white" x-text="job.title"></div>
+                <span class="text-[10px] px-2 py-0.5 rounded-full font-bold"
+                      :class="{
+                        'bg-accent-emerald/20 text-accent-emerald': job.status === 'READY',
+                        'bg-accent-amber/20 text-accent-amber animate-pulse': job.status === 'VOICING' || job.status === 'RENDERING',
+                        'bg-accent-rose/20 text-accent-rose': job.status === 'FAILED',
+                        'bg-dark-800 text-slate-400': job.status === 'QUEUED'
+                      }"
+                      x-text="job.status"></span>
+              </div>
+              <p class="text-[11px] text-slate-300 line-clamp-2" x-text="job.script_text"></p>
+              
+              <!-- Audio Player if ready -->
+              <div x-show="job.audio_path" class="pt-1">
+                <audio controls class="w-full h-8 rounded" :src="job.audio_path"></audio>
+              </div>
+            </div>
+          </template>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 4: SOCIAL & AUDIENCE HUB (الجمهور والمنصات) -->
+    <div x-show="activeTab === 'crm'" x-transition class="space-y-4">
+      
+      <!-- Top Metrics Banner -->
+      <div class="glass-card p-4 rounded-2xl relative overflow-hidden neon-glow">
+        <div class="absolute -right-6 -top-6 w-32 h-32 bg-accent-sky/10 rounded-full blur-2xl"></div>
+        <div class="flex justify-between items-center mb-3">
+          <div class="flex items-center gap-2">
+            <div class="w-8 h-8 rounded-xl bg-accent-cyan/20 text-accent-cyan flex items-center justify-center font-bold">
+              <i data-lucide="share-2" class="w-4 h-4"></i>
+            </div>
+            <div>
+              <h2 class="text-sm font-bold text-white">منظومة المنصات وقاعدة الجمهور</h2>
+              <p class="text-[10px] text-slate-400">إدارة مركزية لـ 6 منصات وليدات المبيعات</p>
+            </div>
+          </div>
+          <button @click="showAddAudienceModal = true" class="px-3 py-1.5 rounded-xl bg-gradient-to-r from-accent-cyan to-accent-sky text-black font-extrabold text-xs flex items-center gap-1.5 shadow-md active:scale-95">
+            <i data-lucide="user-plus" class="w-3.5 h-3.5"></i> إضافة عضو
+          </button>
+        </div>
+
+        <!-- 3 Quick Stat Counters -->
+        <div class="grid grid-cols-3 gap-2 text-center pt-1">
+          <div class="bg-dark-950/60 rounded-xl p-2.5 border border-dark-700/50">
+            <div class="text-[10px] text-slate-400 mb-0.5">المنصات النشطة</div>
+            <div class="text-lg font-black font-mono text-accent-cyan" x-text="socialAccounts.length || 6">6</div>
+            <div class="text-[9px] text-accent-emerald flex items-center justify-center gap-0.5 mt-0.5">
+              <span class="w-1.5 h-1.5 rounded-full bg-accent-emerald inline-block"></span> متصلة بالكامل
+            </div>
+          </div>
+
+          <div class="bg-dark-950/60 rounded-xl p-2.5 border border-dark-700/50">
+            <div class="text-[10px] text-slate-400 mb-0.5">إجمالي المتابعين</div>
+            <div class="text-lg font-black font-mono text-accent-sky" x-text="(audienceSummary.total_social_followers || 11850).toLocaleString()">11,850</div>
+            <div class="text-[9px] text-slate-400 mt-0.5">عبر 6 شبكات</div>
+          </div>
+
+          <div class="bg-dark-950/60 rounded-xl p-2.5 border border-dark-700/50">
+            <div class="text-[10px] text-slate-400 mb-0.5">سجلات الجمهور</div>
+            <div class="text-lg font-black font-mono text-accent-emerald" x-text="audienceMembers.length">5</div>
+            <div class="text-[9px] text-slate-400 mt-0.5">ليدات ومتابعين</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sub-Tab Navigation Bar -->
+      <div class="grid grid-cols-3 gap-1 bg-dark-950 p-1 rounded-xl border border-dark-800">
+        <button @click="audienceSubTab = 'audience'"
+                class="py-2 text-xs font-bold rounded-lg transition flex items-center justify-center gap-1.5"
+                :class="audienceSubTab === 'audience' ? 'bg-dark-800 text-accent-cyan shadow' : 'text-slate-400 hover:text-white'">
+          <i data-lucide="users" class="w-3.5 h-3.5"></i>
+          دليل الجمهور
+        </button>
+        <button @click="audienceSubTab = 'accounts'"
+                class="py-2 text-xs font-bold rounded-lg transition flex items-center justify-center gap-1.5"
+                :class="audienceSubTab === 'accounts' ? 'bg-dark-800 text-accent-cyan shadow' : 'text-slate-400 hover:text-white'">
+          <i data-lucide="globe" class="w-3.5 h-3.5"></i>
+          منصات التواصل
+        </button>
+        <button @click="audienceSubTab = 'publish'"
+                class="py-2 text-xs font-bold rounded-lg transition flex items-center justify-center gap-1.5"
+                :class="audienceSubTab === 'publish' ? 'bg-dark-800 text-accent-cyan shadow' : 'text-slate-400 hover:text-white'">
+          <i data-lucide="send" class="w-3.5 h-3.5"></i>
+          نشر متزامن
+        </button>
+      </div>
+
+      <!-- SUB-VIEW 1: AUDIENCE DIRECTORY & CRM -->
+      <div x-show="audienceSubTab === 'audience'" class="space-y-3">
+        <!-- Search & Filter Bar -->
+        <div class="space-y-2">
+          <div class="relative">
+            <input type="text" x-model="audienceSearch" placeholder="بحث بالاسم، المعرف، الهاتف، أو الوسم..."
+                   class="w-full bg-dark-950 border border-dark-700 rounded-xl pr-9 pl-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-accent-cyan">
+            <i data-lucide="search" class="w-4 h-4 text-slate-500 absolute right-3 top-2.5"></i>
+          </div>
+
+          <!-- Filter Pills -->
+          <div class="flex gap-1.5 overflow-x-auto no-scrollbar pb-1 text-[11px]">
+            <button @click="audienceFilter = 'all'"
+                    class="px-3 py-1 rounded-full whitespace-nowrap font-bold transition"
+                    :class="audienceFilter === 'all' ? 'bg-accent-cyan text-black' : 'bg-dark-900 border border-dark-700 text-slate-400'">
+              الكل (<span x-text="audienceMembers.length"></span>)
+            </button>
+            <button @click="audienceFilter = 'vip_trader'"
+                    class="px-3 py-1 rounded-full whitespace-nowrap font-bold transition"
+                    :class="audienceFilter === 'vip_trader' ? 'bg-accent-amber text-black' : 'bg-dark-900 border border-dark-700 text-slate-400'">
+              🏆 متداولو الذهب
+            </button>
+            <button @click="audienceFilter = 'pos_buyer'"
+                    class="px-3 py-1 rounded-full whitespace-nowrap font-bold transition"
+                    :class="audienceFilter === 'pos_buyer' ? 'bg-accent-emerald text-black' : 'bg-dark-900 border border-dark-700 text-slate-400'">
+              🛒 عملاء شمل POS
+            </button>
+            <button @click="audienceFilter = 'developer'"
+                    class="px-3 py-1 rounded-full whitespace-nowrap font-bold transition"
+                    :class="audienceFilter === 'developer' ? 'bg-accent-sky text-white' : 'bg-dark-900 border border-dark-700 text-slate-400'">
+              💻 مطورون وبرمجة
+            </button>
+          </div>
+        </div>
+
+        <!-- Audience Cards List -->
+        <div class="space-y-2.5">
+          <template x-for="m in filteredAudience()" :key="m.id">
+            <div class="glass-card p-3.5 rounded-xl space-y-2 hover:border-dark-700 transition">
+              <div class="flex items-start justify-between">
+                <div class="flex items-center gap-2.5">
+                  <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-dark-800 to-dark-700 border border-dark-600 flex items-center justify-center font-bold text-xs text-white">
+                    <span x-text="m.name ? m.name.charAt(0) : '؟'"></span>
+                  </div>
+                  <div>
+                    <div class="font-bold text-xs text-white flex items-center gap-1.5">
+                      <span x-text="m.name"></span>
+                      <span class="text-[10px] px-1.5 py-0.2 rounded font-mono uppercase"
+                            :class="{
+                              'bg-red-500/20 text-red-400': m.platform === 'youtube',
+                              'bg-pink-500/20 text-pink-400': m.platform === 'tiktok' || m.platform === 'instagram',
+                              'bg-blue-500/20 text-blue-400': m.platform === 'facebook' || m.platform === 'linkedin',
+                              'bg-sky-500/20 text-sky-400': m.platform === 'twitter',
+                              'bg-emerald-500/20 text-emerald-400': m.platform === 'whatsapp'
+                            }"
+                            x-text="m.platform"></span>
+                    </div>
+                    <div class="text-[11px] text-slate-400 font-mono" x-text="m.username_or_handle || '@general'"></div>
+                  </div>
+                </div>
+
+                <!-- Engagement Score Badge -->
+                <div class="text-right">
+                  <div class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-accent-amber/20 text-accent-amber">
+                    <i data-lucide="star" class="w-3 h-3"></i>
+                    <span x-text="m.engagement_score + '%'"></span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Notes & Tags -->
+              <p class="text-xs text-slate-300 line-clamp-2" x-text="m.notes || 'لا توجد ملاحظات مسجلة'"></p>
+
+              <!-- Tags pills -->
+              <div class="flex flex-wrap gap-1" x-show="m.tags">
+                <template x-for="t in (m.tags || '').split(',')" :key="t">
+                  <span class="text-[9px] px-2 py-0.5 rounded-full bg-dark-950 border border-dark-800 text-slate-400" x-text="'#' + t.trim()"></span>
+                </template>
+              </div>
+
+              <!-- Actions & Contact Footer -->
+              <div class="pt-2 border-t border-dark-800/80 flex items-center justify-between text-xs">
+                <div class="text-slate-400 font-mono text-[11px]" x-text="m.contact_phone || m.contact_email || 'بدون اتصال'"></div>
+                
+                <div class="flex items-center gap-1.5">
+                  <a x-show="m.contact_phone" :href="'https://wa.me/' + m.contact_phone.replace(/[^0-9]/g, '')" target="_blank"
+                     class="px-2 py-1 rounded-lg bg-accent-emerald/20 hover:bg-accent-emerald text-accent-emerald hover:text-black font-bold text-[10px] flex items-center gap-1 transition">
+                    <i data-lucide="message-circle" class="w-3 h-3"></i> واتساب
+                  </a>
+                  <a x-show="m.contact_phone" :href="'tel:' + m.contact_phone"
+                     class="p-1 rounded-lg bg-dark-800 text-slate-300 hover:text-white transition">
+                    <i data-lucide="phone" class="w-3 h-3"></i>
+                  </a>
+                  <a x-show="m.contact_email" :href="'mailto:' + m.contact_email"
+                     class="p-1 rounded-lg bg-dark-800 text-slate-300 hover:text-white transition">
+                    <i data-lucide="mail" class="w-3 h-3"></i>
+                  </a>
+                </div>
+              </div>
+            </div>
+          </template>
+
+          <!-- Empty State -->
+          <div x-show="filteredAudience().length === 0" class="text-center py-8 glass-card rounded-xl space-y-2">
+            <i data-lucide="inbox" class="w-8 h-8 text-slate-600 mx-auto"></i>
+            <p class="text-xs text-slate-400">لا توجد نتائج تطابق البحث في هذه الفئة.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- SUB-VIEW 2: SOCIAL ACCOUNTS MATRIX -->
+      <div x-show="audienceSubTab === 'accounts'" class="space-y-3">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+          <template x-for="acc in socialAccounts" :key="acc.id">
+            <div class="glass-card p-3.5 rounded-xl space-y-2 relative overflow-hidden">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                  <div class="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-white text-xs"
+                       :class="{
+                         'bg-red-600': acc.id === 'youtube',
+                         'bg-slate-900 border border-pink-500': acc.id === 'tiktok',
+                         'bg-blue-600': acc.id === 'facebook',
+                         'bg-gradient-to-tr from-amber-500 via-pink-500 to-purple-600': acc.id === 'instagram',
+                         'bg-black border border-slate-700': acc.id === 'twitter',
+                         'bg-blue-700': acc.id === 'linkedin'
+                       }">
+                    <span x-text="acc.platform_name.charAt(0)"></span>
+                  </div>
+                  <div>
+                    <div class="font-bold text-xs text-white" x-text="acc.platform_name"></div>
+                    <div class="text-[10px] text-slate-400 font-mono" x-text="acc.account_handle"></div>
+                  </div>
+                </div>
+
+                <span class="px-2 py-0.5 rounded-full text-[9px] font-bold flex items-center gap-1"
+                      :class="acc.auth_status === 'CONNECTED' ? 'bg-accent-emerald/20 text-accent-emerald' : 'bg-slate-800 text-slate-400'">
+                  <span class="w-1.5 h-1.5 rounded-full" :class="acc.auth_status === 'CONNECTED' ? 'bg-accent-emerald' : 'bg-slate-500'"></span>
+                  <span x-text="acc.auth_status === 'CONNECTED' ? 'متصل 🟢' : 'مفصول'"></span>
+                </span>
+              </div>
+
+              <div class="grid grid-cols-2 gap-2 pt-1 border-t border-dark-800/80 text-center font-mono">
+                <div class="bg-dark-950/60 p-1.5 rounded-lg">
+                  <div class="text-[9px] text-slate-500">المتابعون</div>
+                  <div class="text-xs font-bold text-white" x-text="(acc.followers_count || 0).toLocaleString()"></div>
+                </div>
+                <div class="bg-dark-950/60 p-1.5 rounded-lg">
+                  <div class="text-[9px] text-slate-500">المنشورات</div>
+                  <div class="text-xs font-bold text-accent-cyan" x-text="acc.total_posts || 0"></div>
+                </div>
+              </div>
+
+              <div class="flex items-center justify-between pt-1 text-[10px]">
+                <span class="text-slate-400 truncate max-w-[180px]" x-text="acc.notes"></span>
+                <a :href="acc.profile_url" target="_blank" class="text-accent-cyan hover:underline flex items-center gap-0.5">
+                  زيارة <i data-lucide="external-link" class="w-3 h-3"></i>
+                </a>
+              </div>
+            </div>
+          </template>
+        </div>
+      </div>
+
+      <!-- SUB-VIEW 3: OMNICHANNEL BROADCAST -->
+      <div x-show="audienceSubTab === 'publish'" class="glass-card p-4 rounded-2xl space-y-3">
+        <div class="flex items-center justify-between">
+          <h3 class="text-xs font-bold text-white flex items-center gap-1.5">
+            <i data-lucide="megaphone" class="w-4 h-4 text-accent-cyan"></i>
+            نشر متزامن لكافة شبكات التواصل
+          </h3>
+          <span class="text-[10px] text-slate-400">بث فوري لـ 6 منصات</span>
+        </div>
+
+        <div class="space-y-2">
+          <div>
+            <label class="text-xs text-slate-400">عنوان المنشور (اختياري):</label>
+            <input type="text" x-model="publishForm.title" placeholder="مثال: تحليل تحركات الذهب اليوم ومفاجآت الفيدرالي"
+                   class="w-full bg-dark-950 border border-dark-700 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-accent-cyan">
+          </div>
+
+          <div>
+            <label class="text-xs text-slate-400">محتوى المنشور والهاشتاجات:</label>
+            <textarea x-model="publishForm.content" rows="4" placeholder="اكتب نص المنشور هنا، وسيتم نشره ومزامنته تلقائياً على كل المنصات المختارة..."
+                      class="w-full bg-dark-950 border border-dark-700 rounded-xl p-3 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-accent-cyan"></textarea>
+          </div>
+
+          <div>
+            <label class="text-xs text-slate-400">رابط صورة أو فيديو مرفق (اختياري):</label>
+            <input type="text" x-model="publishForm.media_url" placeholder="https://... أو /media/video_123.mp4"
+                   class="w-full bg-dark-950 border border-dark-700 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-accent-cyan">
+          </div>
+
+          <div>
+            <label class="text-xs text-slate-400 mb-1.5 block">المنصات المستهدفة للنشر:</label>
+            <div class="grid grid-cols-3 gap-1.5 text-[11px]">
+              <label class="flex items-center gap-1.5 bg-dark-950 border border-dark-800 p-2 rounded-lg cursor-pointer">
+                <input type="checkbox" value="youtube" x-model="publishForm.platforms" class="rounded text-accent-cyan">
+                <span>🔴 YouTube</span>
+              </label>
+              <label class="flex items-center gap-1.5 bg-dark-950 border border-dark-800 p-2 rounded-lg cursor-pointer">
+                <input type="checkbox" value="tiktok" x-model="publishForm.platforms" class="rounded text-accent-cyan">
+                <span>🎵 TikTok</span>
+              </label>
+              <label class="flex items-center gap-1.5 bg-dark-950 border border-dark-800 p-2 rounded-lg cursor-pointer">
+                <input type="checkbox" value="facebook" x-model="publishForm.platforms" class="rounded text-accent-cyan">
+                <span>📘 Facebook</span>
+              </label>
+              <label class="flex items-center gap-1.5 bg-dark-950 border border-dark-800 p-2 rounded-lg cursor-pointer">
+                <input type="checkbox" value="instagram" x-model="publishForm.platforms" class="rounded text-accent-cyan">
+                <span>📸 Instagram</span>
+              </label>
+              <label class="flex items-center gap-1.5 bg-dark-950 border border-dark-800 p-2 rounded-lg cursor-pointer">
+                <input type="checkbox" value="twitter" x-model="publishForm.platforms" class="rounded text-accent-cyan">
+                <span>🐦 Twitter / X</span>
+              </label>
+              <label class="flex items-center gap-1.5 bg-dark-950 border border-dark-800 p-2 rounded-lg cursor-pointer">
+                <input type="checkbox" value="linkedin" x-model="publishForm.platforms" class="rounded text-accent-cyan">
+                <span>💼 LinkedIn</span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <button @click="dispatchSocialBroadcast()" :disabled="publishLoading || !publishForm.content.trim()"
+                class="w-full py-2.5 bg-gradient-to-r from-accent-sky to-accent-cyan text-black font-extrabold rounded-xl text-xs flex items-center justify-center gap-2 shadow-lg transition active:scale-95 disabled:opacity-50">
+          <i data-lucide="send" class="w-4 h-4" :class="publishLoading ? 'animate-spin' : ''"></i>
+          <span x-text="publishLoading ? 'جاري البث لكافة المنصات...' : 'إطلاق النشر المتزامن الآن 🚀'"></span>
+        </button>
+
+        <!-- Broadcast confirmation alert -->
+        <div x-show="publishResult" class="p-3 bg-accent-emerald/20 border border-accent-emerald/40 rounded-xl text-accent-emerald text-xs space-y-1">
+          <div class="font-bold flex items-center gap-1">
+            <i data-lucide="check-circle" class="w-4 h-4"></i>
+            تم جدولة وبث المنشور بنجاح!
+          </div>
+          <div class="text-[10px] text-slate-300">
+            تم الإرسال لـ: <span class="font-mono" x-text="(publishResult?.platforms || []).join(', ')"></span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- TAB 5: AI BRAIN & TERMINAL (الوكيل والطرفية) -->
+    <div x-show="activeTab === 'terminal'" x-transition class="space-y-4">
+      
+      <!-- AI Agent Prompt Box -->
+      <div class="glass-card p-4 rounded-2xl space-y-3">
+        <div class="flex items-center justify-between">
+          <h2 class="text-xs font-bold text-white flex items-center gap-1.5">
+            <i data-lucide="bot" class="w-4 h-4 text-accent-cyan"></i>
+            توجيه أمر ذكي لوكيل السيرفر
+          </h2>
+          <label class="flex items-center gap-1 text-[11px] text-slate-400 cursor-pointer">
+            <input type="checkbox" x-model="chatVoiceReply" class="rounded bg-dark-900 border-dark-700 text-accent-cyan">
+            رد صوتي 🎙️
+          </label>
+        </div>
+
+        <div class="relative">
+          <textarea x-model="chatInput" rows="3" placeholder="اطلب أي شيء: أصلح كود، افحص المبيعات، شغل خدمة..."
+                    class="w-full bg-dark-950 border border-dark-700 rounded-xl p-3 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-accent-cyan"></textarea>
+        </div>
+
+        <button @click="sendAgentChat()" :disabled="chatLoading || !chatInput.trim()"
+                class="w-full py-2.5 bg-accent-sky hover:bg-accent-sky/80 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-2 shadow-lg transition active:scale-95 disabled:opacity-50">
+          <i data-lucide="send" class="w-3.5 h-3.5" :class="chatLoading ? 'animate-spin' : ''"></i>
+          <span x-text="chatLoading ? 'جاري التنفيذ والتفكير...' : 'إرسال الأمر للوكيل 🚀'"></span>
+        </button>
+
+        <!-- Response box -->
+        <div x-show="agentResponse" class="p-3 rounded-xl bg-dark-950 border border-dark-700 space-y-2">
+          <div class="text-[11px] text-accent-cyan font-bold flex items-center gap-1">
+            <i data-lucide="check-circle" class="w-3.5 h-3.5"></i> رد الوكيل:
+          </div>
+          <p class="text-xs text-slate-200 whitespace-pre-line" x-text="agentResponse"></p>
+          <div x-show="agentVoiceUrl">
+            <audio controls class="w-full h-8 mt-2 rounded" :src="agentVoiceUrl"></audio>
+          </div>
+        </div>
+      </div>
+
+      <!-- Remote PowerShell Shell -->
+      <div class="glass-card p-4 rounded-2xl space-y-3">
+        <h2 class="text-xs font-bold text-white flex items-center gap-1.5">
+          <i data-lucide="terminal" class="w-4 h-4 text-accent-emerald"></i>
+          الطرفية المباشرة (PowerShell Remote)
+        </h2>
+        <div class="flex gap-2">
+          <input type="text" x-model="termCommand" @keyup.enter="runTermCommand()" placeholder="Get-Process, dir, git status..."
+                 class="flex-1 bg-dark-950 border border-dark-700 rounded-xl px-3 py-2 text-xs text-white font-mono placeholder-slate-500 focus:outline-none focus:border-accent-emerald">
+          <button @click="runTermCommand()" :disabled="termLoading" class="px-4 py-2 bg-accent-emerald text-black font-bold rounded-xl text-xs active:scale-95">
+            تنفيذ
+          </button>
+        </div>
+
+        <!-- Terminal Output -->
+        <div class="bg-black/90 rounded-xl p-3 border border-dark-700 font-mono text-[11px] text-accent-emerald h-44 overflow-y-auto whitespace-pre-wrap" x-text="termOutput || '// مخرجات الأوامر تظهر هنا مباشرة...'"></div>
+      </div>
+
+    </div>
+
+  </main>
+
+  <!-- MODAL: ADD AUDIENCE MEMBER -->
+  <div x-show="showAddAudienceModal" x-transition.opacity class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+    <div @click.away="showAddAudienceModal = false" class="bg-dark-900 border border-dark-700 w-full max-w-md rounded-2xl p-4 space-y-3 max-h-[90vh] overflow-y-auto">
+      <div class="flex items-center justify-between pb-2 border-b border-dark-800">
+        <h3 class="font-bold text-sm text-white flex items-center gap-2">
+          <i data-lucide="user-plus" class="w-4 h-4 text-accent-cyan"></i>
+          إضافة متابع أو عميل جديد
+        </h3>
+        <button @click="showAddAudienceModal = false" class="text-slate-400 hover:text-white p-1">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+      <div class="space-y-2.5">
+        <div>
+          <label class="text-[11px] text-slate-400">الاسم الكامل *</label>
+          <input type="text" x-model="audienceForm.name" placeholder="مثال: خالد الشمري"
+                 class="w-full bg-dark-950 border border-dark-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-accent-cyan">
+        </div>
+
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="text-[11px] text-slate-400">المعرف / Handle</label>
+            <input type="text" x-model="audienceForm.username_or_handle" placeholder="@khaled_trader"
+                   class="w-full bg-dark-950 border border-dark-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-accent-cyan">
+          </div>
+          <div>
+            <label class="text-[11px] text-slate-400">المنصة الرئيسية</label>
+            <select x-model="audienceForm.platform" class="w-full bg-dark-950 border border-dark-700 rounded-xl px-2 py-2 text-xs text-white focus:outline-none focus:border-accent-cyan">
+              <option value="twitter">Twitter / X</option>
+              <option value="youtube">YouTube</option>
+              <option value="tiktok">TikTok</option>
+              <option value="facebook">Facebook</option>
+              <option value="instagram">Instagram</option>
+              <option value="linkedin">LinkedIn</option>
+              <option value="telegram">Telegram</option>
+              <option value="whatsapp">WhatsApp</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="text-[11px] text-slate-400">رقم الهاتف / واتساب</label>
+            <input type="text" x-model="audienceForm.contact_phone" placeholder="+966501112233"
+                   class="w-full bg-dark-950 border border-dark-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-accent-cyan font-mono">
+          </div>
+          <div>
+            <label class="text-[11px] text-slate-400">البريد الإلكتروني</label>
+            <input type="email" x-model="audienceForm.contact_email" placeholder="client@domain.com"
+                   class="w-full bg-dark-950 border border-dark-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-accent-cyan">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="text-[11px] text-slate-400">الفئة والاهتمام</label>
+            <select x-model="audienceForm.segment" class="w-full bg-dark-950 border border-dark-700 rounded-xl px-2 py-2 text-xs text-white focus:outline-none focus:border-accent-cyan">
+              <option value="vip_trader">🏆 متداول ذهب وأسواق</option>
+              <option value="pos_buyer">🛒 مشتري شمل POS</option>
+              <option value="developer">💻 مطور وبرمجة</option>
+              <option value="general">👤 متابع عام</option>
+            </select>
+          </div>
+          <div>
+            <label class="text-[11px] text-slate-400">المرحلة</label>
+            <select x-model="audienceForm.lifecycle_stage" class="w-full bg-dark-950 border border-dark-700 rounded-xl px-2 py-2 text-xs text-white focus:outline-none focus:border-accent-cyan">
+              <option value="lead">ليد جديد (Lead)</option>
+              <option value="engaged">متفاعل نشط</option>
+              <option value="customer">عميل حالي</option>
+              <option value="vip">عميل VIP</option>
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label class="text-[11px] text-slate-400">ملاحظات ووسوم</label>
+          <textarea x-model="audienceForm.notes" rows="2" placeholder="تفاصيل الاهتمام، الاستفسارات السابقة، الوسوم..."
+                    class="w-full bg-dark-950 border border-dark-700 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-accent-cyan"></textarea>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2 pt-2 border-t border-dark-800">
+        <button @click="showAddAudienceModal = false" class="w-1/3 py-2 bg-dark-800 text-slate-300 font-bold rounded-xl text-xs active:scale-95">
+          إلغاء
+        </button>
+        <button @click="saveAudienceMember()" class="w-2/3 py-2 bg-gradient-to-r from-accent-cyan to-accent-sky text-black font-extrabold rounded-xl text-xs active:scale-95 shadow">
+          حفظ في قاعدة البيانات
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom Fixed Navigation Bar (Mobile Native Touch Feel) -->
+  <nav class="fixed bottom-0 inset-x-0 z-50 bg-dark-900/95 backdrop-blur-xl border-t border-dark-800 px-2 py-2">
+    <div class="max-w-md mx-auto grid grid-cols-5 gap-1">
+      
+      <!-- Overview -->
+      <button @click="activeTab = 'overview'" class="flex flex-col items-center justify-center py-1.5 rounded-xl transition"
+              :class="activeTab === 'overview' ? 'text-accent-cyan font-bold' : 'text-slate-400 hover:text-slate-200'">
+        <i data-lucide="layout-dashboard" class="w-5 h-5"></i>
+        <span class="text-[10px] mt-1">الرئيسية</span>
+      </button>
+
+      <!-- Projects -->
+      <button @click="activeTab = 'projects'" class="flex flex-col items-center justify-center py-1.5 rounded-xl transition"
+              :class="activeTab === 'projects' ? 'text-accent-cyan font-bold' : 'text-slate-400 hover:text-slate-200'">
+        <i data-lucide="server" class="w-5 h-5"></i>
+        <span class="text-[10px] mt-1">المشاريع</span>
+      </button>
+
+      <!-- Media Studio -->
+      <button @click="activeTab = 'media'" class="flex flex-col items-center justify-center py-1.5 rounded-xl transition"
+              :class="activeTab === 'media' ? 'text-accent-cyan font-bold' : 'text-slate-400 hover:text-slate-200'">
+        <i data-lucide="clapperboard" class="w-5 h-5"></i>
+        <span class="text-[10px] mt-1">الميديا</span>
+      </button>
+
+      <!-- Audience & Social Matrix -->
+      <button @click="activeTab = 'crm'" class="flex flex-col items-center justify-center py-1.5 rounded-xl transition"
+              :class="activeTab === 'crm' ? 'text-accent-cyan font-bold' : 'text-slate-400 hover:text-slate-200'">
+        <i data-lucide="users" class="w-5 h-5"></i>
+        <span class="text-[10px] mt-1">الجمهور</span>
+      </button>
+
+      <!-- AI Brain & Terminal -->
+      <button @click="activeTab = 'terminal'" class="flex flex-col items-center justify-center py-1.5 rounded-xl transition"
+              :class="activeTab === 'terminal' ? 'text-accent-cyan font-bold' : 'text-slate-400 hover:text-slate-200'">
+        <i data-lucide="terminal" class="w-5 h-5"></i>
+        <span class="text-[10px] mt-1">الوكيل</span>
+      </button>
+
+    </div>
+  </nav>
+
+  <!-- Service Worker Registration & App Logic -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(console.error);
+    }
+
+    function hqApp() {
+      return {
+        activeTab: 'overview',
+        loading: false,
+        wsConnected: false,
+        socket: null,
+        telemetry: {
+          cpu_percent: 0,
+          ram_percent: 0,
+          ram_used_gb: 0,
+          ram_total_gb: 0,
+          disk_free_gb: 0,
+          disk_percent: 0,
+          uptime_hours: 0,
+          counts: {}
+        },
+        projects: [],
+        mediaQueue: [],
+        clients: [],
+        socialAccounts: [],
+        audienceMembers: [],
+        audienceSummary: {
+          total_platforms: 6,
+          total_social_followers: 11850,
+          total_audience_records: 5,
+          by_segment: {},
+          by_platform: {}
+        },
+        audienceSubTab: 'audience',
+        audienceFilter: 'all',
+        audienceSearch: '',
+        showAddAudienceModal: false,
+        audienceForm: {
+          name: '',
+          username_or_handle: '',
+          platform: 'twitter',
+          contact_phone: '',
+          contact_email: '',
+          segment: 'vip_trader',
+          lifecycle_stage: 'lead',
+          engagement_score: 80,
+          notes: '',
+          tags: ''
+        },
+        publishForm: {
+          title: '',
+          content: '',
+          media_url: '',
+          platforms: ['youtube', 'tiktok', 'facebook', 'instagram', 'twitter', 'linkedin']
+        },
+        publishLoading: false,
+        publishResult: null,
+        mediaLoading: false,
+        mediaForm: {
+          topic: '',
+          voice_name: 'ar-EG-ShakirNeural',
+          engine: 'remotion'
+        },
+        chatInput: '',
+        chatLoading: false,
+        chatVoiceReply: false,
+        agentResponse: '',
+        agentVoiceUrl: '',
+        termCommand: '',
+        termLoading: false,
+        termOutput: '',
+        uploadLoading: false,
+        uploadResult: null,
+
+        async uploadFile(e) {
+          const file = e.target.files[0];
+          if (!file) return;
+          this.uploadLoading = true;
+          this.uploadResult = null;
+          const formData = new FormData();
+          formData.append('file', file);
+          try {
+            const res = await fetch('/api/upload_and_inspect', {
+              method: 'POST',
+              body: formData
+            }).then(r => r.json());
+            this.uploadResult = res;
+            if (!res.success) {
+              alert('فشل الفحص: ' + (res.error || 'خطأ غير معروف'));
+            }
+          } catch (err) {
+            alert('فشل رفع الملف للسيرفر: ' + err);
+          } finally {
+            this.uploadLoading = false;
+          }
+        },
+
+        init() {
+          this.$nextTick(() => lucide.createIcons());
+          this.fetchInitialData();
+          this.initWebSocket();
+          this.$watch('activeTab', () => this.$nextTick(() => lucide.createIcons()));
+        },
+
+        initWebSocket() {
+          const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+          const wsUrl = `${protocol}//${location.host}/ws/live`;
+          this.socket = new WebSocket(wsUrl);
+
+          this.socket.onopen = () => {
+            this.wsConnected = true;
+          };
+
+          this.socket.onmessage = (event) => {
+            try {
+              const data = JSON.parse(event.data);
+              this.telemetry = data;
+            } catch (err) {}
+          };
+
+          this.socket.onclose = () => {
+            this.wsConnected = false;
+            setTimeout(() => this.initWebSocket(), 3000);
+          };
+        },
+
+        async fetchInitialData() {
+          this.loading = true;
+          try {
+            const [statusRes, projRes, mediaRes, crmRes, socRes, audRes] = await Promise.all([
+              fetch('/api/status').then(r => r.json()).catch(() => ({})),
+              fetch('/api/projects').then(r => r.json()).catch(() => ([])),
+              fetch('/api/media').then(r => r.json()).catch(() => ([])),
+              fetch('/api/crm').then(r => r.json()).catch(() => ([])),
+              fetch('/api/social').then(r => r.json()).catch(() => ({accounts: []})),
+              fetch('/api/audience').then(r => r.json()).catch(() => ({members: []}))
+            ]);
+            this.telemetry = statusRes;
+            this.projects = projRes;
+            this.mediaQueue = mediaRes;
+            this.clients = crmRes;
+            this.socialAccounts = socRes.accounts || [];
+            this.audienceMembers = audRes.members || [];
+            if (audRes.summary) {
+              this.audienceSummary = audRes.summary;
+            }
+          } catch (e) {
+            console.error('Fetch error:', e);
+          } finally {
+            this.loading = false;
+            this.$nextTick(() => lucide.createIcons());
+          }
+        },
+
+        filteredAudience() {
+          return this.audienceMembers.filter(m => {
+            const matchesSegment = this.audienceFilter === 'all' || m.segment === this.audienceFilter;
+            const q = (this.audienceSearch || '').toLowerCase().trim();
+            if (!q) return matchesSegment;
+            const matchesSearch = (m.name && m.name.toLowerCase().includes(q)) ||
+                                  (m.username_or_handle && m.username_or_handle.toLowerCase().includes(q)) ||
+                                  (m.contact_phone && m.contact_phone.includes(q)) ||
+                                  (m.notes && m.notes.toLowerCase().includes(q)) ||
+                                  (m.platform && m.platform.toLowerCase().includes(q));
+            return matchesSegment && matchesSearch;
+          });
+        },
+
+        async fetchSocialAndAudience() {
+          try {
+            const [socRes, audRes] = await Promise.all([
+              fetch('/api/social').then(r => r.json()),
+              fetch('/api/audience').then(r => r.json())
+            ]);
+            this.socialAccounts = socRes.accounts || [];
+            this.audienceMembers = audRes.members || [];
+            if (audRes.summary) {
+              this.audienceSummary = audRes.summary;
+            }
+          } catch(e) {
+            console.error('Error loading social/audience:', e);
+          }
+        },
+
+        async saveAudienceMember() {
+          if (!this.audienceForm.name) {
+            alert('يرجى إدخال اسم المتابع أو العميل');
+            return;
+          }
+          try {
+            const res = await fetch('/api/audience', {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify(this.audienceForm)
+            }).then(r => r.json());
+            if (res.success) {
+              this.showAddAudienceModal = false;
+              this.audienceForm = {
+                name: '', username_or_handle: '', platform: 'twitter',
+                contact_phone: '', contact_email: '', segment: 'vip_trader',
+                lifecycle_stage: 'lead', engagement_score: 80, notes: '', tags: ''
+              };
+              await this.fetchSocialAndAudience();
+            } else {
+              alert('فشل الإضافة: ' + (res.error || 'خطأ'));
+            }
+          } catch (e) {
+            alert('خطأ أثناء الحفظ: ' + e);
+          }
+        },
+
+        async dispatchSocialBroadcast() {
+          if (!this.publishForm.content.trim()) {
+            alert('يرجى كتابة محتوى المنشور أولاً');
+            return;
+          }
+          this.publishLoading = true;
+          this.publishResult = null;
+          try {
+            const res = await fetch('/api/social/publish', {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify(this.publishForm)
+            }).then(r => r.json());
+            this.publishResult = res;
+            if (res.success) {
+              this.publishForm.content = '';
+              this.publishForm.title = '';
+              await this.fetchSocialAndAudience();
+            }
+          } catch(e) {
+            alert('فشل النشر المتزامن: ' + e);
+          } finally {
+            this.publishLoading = false;
+          }
+        },
+
+        refreshData() {
+          this.fetchInitialData();
+        },
+
+        runningProjectsCount() {
+          return this.projects.filter(p => p.status === 'RUNNING').length;
+        },
+
+        async controlProject(id, action) {
+          try {
+            const res = await fetch(`/api/projects/${id}/action`, {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({action})
+            }).then(r => r.json());
+            await this.fetchInitialData();
+          } catch (e) {
+            alert('خطأ في العملية: ' + e);
+          }
+        },
+
+        async runArtisan(id, cmd) {
+          try {
+            const res = await fetch(`/api/projects/${id}/action`, {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({action: 'artisan', artisan_cmd: cmd})
+            }).then(r => r.json());
+            alert(res.output || JSON.stringify(res));
+          } catch (e) {
+            alert('Artisan Error: ' + e);
+          }
+        },
+
+        async submitMediaJob() {
+          if (!this.mediaForm.topic) return;
+          this.mediaLoading = true;
+          try {
+            const res = await fetch('/api/media/generate', {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({
+                title: this.mediaForm.topic,
+                topic: this.mediaForm.topic,
+                voice_name: this.mediaForm.voice_name,
+                engine: this.mediaForm.engine
+              })
+            }).then(r => r.json());
+            this.mediaForm.topic = '';
+            await this.fetchInitialData();
+          } catch (e) {
+            alert('فشل توليد الميديا: ' + e);
+          } finally {
+            this.mediaLoading = false;
+          }
+        },
+
+        async sendAgentChat() {
+          if (!this.chatInput.trim()) return;
+          this.chatLoading = true;
+          this.agentResponse = '';
+          this.agentVoiceUrl = '';
+          try {
+            const res = await fetch('/api/agent/chat', {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({
+                message: this.chatInput,
+                voice_reply: this.chatVoiceReply
+              })
+            }).then(r => r.json());
+            this.agentResponse = res.reply;
+            this.agentVoiceUrl = res.audio_url || '';
+            this.chatInput = '';
+          } catch (e) {
+            this.agentResponse = 'خطأ في الاتصال بالوكيل: ' + e;
+          } finally {
+            this.chatLoading = false;
+          }
+        },
+
+        async runTermCommand() {
+          if (!this.termCommand.trim()) return;
+          this.termLoading = true;
+          try {
+            const res = await fetch('/api/terminal', {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({command: this.termCommand})
+            }).then(r => r.json());
+            this.termOutput = res.output || res.error || JSON.stringify(res);
+          } catch (e) {
+            this.termOutput = 'Shell Error: ' + e;
+          } finally {
+            this.termLoading = false;
+          }
+        },
+
+        async triggerAction(type) {
+          if (type === 'start_all') {
+            await this.controlProject('shamel-pos', 'start');
+            await this.controlProject('lead-preview-bot', 'start');
+          }
+        }
+      }
+    }
+  </script>
+</body>
+</html>

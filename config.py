@@ -23,12 +23,28 @@ GEMINI_API_KEY_2 = _get("GEMINI_API_KEY_2", required=False)  # optional extra qu
 # Optional second Gemini model on the same key: Google counts the free quota per model.
 GEMINI_BACKUP_MODEL = _get("GEMINI_BACKUP_MODEL", required=False)
 ANTHROPIC_API_KEY = _get("ANTHROPIC_API_KEY", required=False)
+
+# Hybrid Smart Router configuration (Ollama + OpenRouter + Gemini)
+OLLAMA_BASE_URL = _get("OLLAMA_BASE_URL", required=False) or "http://127.0.0.1:11434/v1/chat/completions"
+OLLAMA_API_KEY = _get("OLLAMA_API_KEY", required=False) or "ollama"
+OLLAMA_MODEL = _get("OLLAMA_MODEL", required=False) or "qwen2.5-coder:14b"
+
+OPENROUTER_API_KEY = _get("OPENROUTER_API_KEY", required=False)
+OPENROUTER_MODEL = _get("OPENROUTER_MODEL", required=False) or "deepseek/deepseek-chat"
+
 # Optional backup providers: used only when the main provider is busy or out of quota.
 # Each one is enabled only when both its key and model are filled in .env.
 BACKUP_KEYS = {
     name: (_get(f"{name.upper()}_API_KEY", required=False), _get(f"{name.upper()}_MODEL", required=False))
     for name in ("Groq", "Cloudflare", "xKiro", "Cerebras", "Mistral", "OpenRouter", "NVIDIA", "ZAI", "Ollama")
 }
+
+# Ensure native Ollama and OpenRouter are correctly mapped in BACKUP_KEYS
+if not BACKUP_KEYS.get("Ollama") or not BACKUP_KEYS["Ollama"][0] or not BACKUP_KEYS["Ollama"][1]:
+    BACKUP_KEYS["Ollama"] = (OLLAMA_API_KEY, OLLAMA_MODEL)
+if OPENROUTER_API_KEY:
+    BACKUP_KEYS["OpenRouter"] = (OPENROUTER_API_KEY, OPENROUTER_MODEL or BACKUP_KEYS.get("OpenRouter", ("", ""))[1] or "deepseek/deepseek-chat")
+
 CLOUDFLARE_ACCOUNT_ID = _get("CLOUDFLARE_ACCOUNT_ID", required=False)
 # Try providers in this order, e.g. "xKiro,Gemini-Lite,Groq" (empty = default order).
 PROVIDER_ORDER = [n.strip() for n in _get("PROVIDER_ORDER", required=False).split(",") if n.strip()]

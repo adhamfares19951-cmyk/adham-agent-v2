@@ -1,16 +1,55 @@
+# ==============================================================================
+# adham-agent: Autonomous Multi-Agent System & Digital Twin Dependencies
+# Python 3.11+
+# ==============================================================================
+
+# Primary LLM SDK (Modern Google Gemini SDK - STRICTLY forbid legacy google-generativeai)
+google-genai>=1.0.0
+
+# Specialized LLM SDK (DeepSeek API via OpenAI SDK compatibility)
+openai>=1.50.0
+
+# Data Validation & Centralized Configuration
+pydantic>=2.7.0
+pydantic-settings>=2.2.0
+python-dotenv>=1.0.1
+
+# High-Performance Async SQLite Database
+aiosqlite>=0.20.0
+
+# Web Scraping & Headless Browser Automation
+playwright>=1.45.0
+beautifulsoup4>=4.12.3
+
+# Google & YouTube Data API v3 Integrations
+google-api-python-client>=2.130.0
+google-auth-oauthlib>=1.2.0
+google-auth-httplib2>=0.2.0
+
+# Automated ATS CV & Document Generation
+python-docx>=1.1.0
+
+# Autonomous Cron & Multi-Agent Task Scheduling
+apscheduler>=3.10.4
+
+# Terminal UI, Diagnostics & Structured Output Formatting
+rich>=13.7.1
+
+# Telegram & Gateway Integrations
 python-telegram-bot[job-queue]>=22.0
-google-genai>=1.0
-python-dotenv>=1.0
+httpx>=0.28.0
 tzdata
 ddgs
 numpy
-python-docx
 flask
 imageio-ffmpeg
-google-auth-oauthlib
-google-api-python-client
-google-auth-httplib2
-httpx>=0.28.0
 youtube-transcript-api
 yt-dlp
 anthropic
+
+# Enterprise Web Platform & Media Engine
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+jinja2>=3.1.4
+python-multipart>=0.0.9
+edge-tts>=7.0.0
