@@ -125,8 +125,10 @@ async def _handle_social_and_seo_direct(update: Update, context: ContextTypes.DE
     if not msg:
         return False
 
+    is_trading = any(k in t for k in ["تداول", "فوركس", "شارت", "كريبتو", "عملات", "ذهب", "trading", "chart", "forex", "btc", "eurusd"])
     is_ig = any(k in t for k in ["انستقرام", "انستغرام", "انستا", "instagram", "ig", "ريلز", "ريل", "reel"])
-    is_publish = any(k in t for k in ["انشر", "نشر", "ارفع", "نزل", "اعمل", "سوي", "share", "post", "publish"])
+    is_short_intent = any(k in t for k in ["شورتس", "شورت", "فيديو", "video", "short", "shorts"])
+    is_publish = any(k in t for k in ["انشر", "نشر", "ارفع", "نزل", "اعمل", "سوي", "share", "post", "publish", "جديد"]) or is_short_intent
     is_tiktok = any(k in t for k in ["تيك توك", "تيكتوك", "tiktok"])
     is_all = any(k in t for k in ["الكل", "كل المنصات", "كل مكان", "الحسابات", "broadcast", "all"])
     is_seo = any(k in t for k in ["سيو", "seo", "محركات البحث", "محرك البحث", "سيت ماب", "sitemap", "فهرسة"])
@@ -243,8 +245,8 @@ async def _handle_social_and_seo_direct(update: Update, context: ContextTypes.DE
                 await msg.reply_text(f"❌ تعذر نشر الريلز على إنستغرام: {err}")
         return True
 
-    # 3. TikTok Upload
-    if is_publish and is_tiktok and not is_ig:
+    # 3. TikTok Upload or Product Short Video
+    if is_publish and (is_tiktok or is_short_intent) and not is_ig and not is_trading:
         await msg.reply_text("⚡ **أمرك يا أدهم!** جاري رفع الفيديو ونشره تلقائياً على حسابك في تيك توك عبر المتصفح الآلي...")
         from tools import social_dispatcher
         res = await social_dispatcher.execute_tiktok_video()
