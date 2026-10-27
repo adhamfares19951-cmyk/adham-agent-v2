@@ -86,23 +86,31 @@ async def upload_video(
         full_caption = f"{caption} {clean_tags}".strip()
 
     from playwright.async_api import async_playwright
+    from core.proxy_manager import get_playwright_proxy_config
+
+    proxy_config = get_playwright_proxy_config()
+    if proxy_config:
+        log.info("Using localized Gulf proxy for TikTok: %s", proxy_config.get("server"))
 
     log.info("Starting autonomous TikTok upload for: %s", v_path.name)
     async with async_playwright() as p:
+        launch_kwargs = {
+            "user_data_dir": str(TIKTOK_DATA_DIR),
+            "headless": True,
+            "viewport": {"width": 1280, "height": 900},
+            "args": ["--disable-blink-features=AutomationControlled"],
+        }
+        if proxy_config:
+            launch_kwargs["proxy"] = proxy_config
+
         try:
             browser_context = await p.chromium.launch_persistent_context(
-                user_data_dir=str(TIKTOK_DATA_DIR),
                 channel="msedge",
-                headless=True,
-                viewport={"width": 1280, "height": 900},
-                args=["--disable-blink-features=AutomationControlled"]
+                **launch_kwargs
             )
         except Exception:
             browser_context = await p.chromium.launch_persistent_context(
-                user_data_dir=str(TIKTOK_DATA_DIR),
-                headless=True,
-                viewport={"width": 1280, "height": 900},
-                args=["--disable-blink-features=AutomationControlled"]
+                **launch_kwargs
             )
 
         # Ensure fresh cookies are injected if available

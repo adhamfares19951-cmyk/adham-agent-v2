@@ -53,10 +53,23 @@ async def publish_instagram_reel(video_path: Path | str, caption: str) -> dict[s
                 cookie["sameSite"] = "Strict"
         playwright_cookies.append(cookie)
 
+    from core.proxy_manager import get_playwright_proxy_config
+    proxy_config = get_playwright_proxy_config()
+    if proxy_config:
+        log.info("Using localized Gulf proxy for Instagram: %s", proxy_config.get("server"))
+
     log.info("Starting autonomous Instagram Reel publishing for: %s", v_path.name)
     async with async_playwright() as p:
-        browser = await p.chromium.launch(channel="msedge", headless=True)
-        ctx = await browser.new_context(viewport={"width": 1280, "height": 900})
+        launch_kwargs = {"headless": True}
+        context_kwargs = {"viewport": {"width": 1280, "height": 900}}
+        if proxy_config:
+            context_kwargs["proxy"] = proxy_config
+
+        try:
+            browser = await p.chromium.launch(channel="msedge", **launch_kwargs)
+        except Exception:
+            browser = await p.chromium.launch(**launch_kwargs)
+        ctx = await browser.new_context(**context_kwargs)
         await ctx.add_cookies(playwright_cookies)
         page = await ctx.new_page()
 
