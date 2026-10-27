@@ -83,6 +83,9 @@ class AgencyOSSupervisor:
 
     def __init__(self) -> None:
         web_port = str(os.getenv("PORT", os.getenv("WEB_PORT", "8080")))
+        is_cloud = bool(os.getenv("RAILWAY_PROJECT_ID") or os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("RENDER") or os.getenv("DYNO"))
+        run_tg = (not is_cloud) or (os.getenv("ENABLE_CLOUD_TELEGRAM", "false").lower() in ("true", "1"))
+
         self.services: list[ServiceProcess] = [
             ServiceProcess(
                 name="WebPlatform",
@@ -93,15 +96,21 @@ class AgencyOSSupervisor:
                     "--log-level", "info",
                 ],
             ),
-            ServiceProcess(
-                name="TelegramBot",
-                cmd=[PYTHON_EXE, "main.py"],
-            ),
-            ServiceProcess(
-                name="CloudflareTunnel",
-                cmd=[PYTHON_EXE, "-m", "core.tunnel_manager"],
-            ),
         ]
+        if run_tg:
+            self.services.append(
+                ServiceProcess(
+                    name="TelegramBot",
+                    cmd=[PYTHON_EXE, "main.py"],
+                )
+            )
+        if not is_cloud:
+            self.services.append(
+                ServiceProcess(
+                    name="CloudflareTunnel",
+                    cmd=[PYTHON_EXE, "-m", "core.tunnel_manager"],
+                )
+            )
         self.running = False
 
     def print_banner(self) -> None:

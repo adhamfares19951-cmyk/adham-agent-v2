@@ -287,6 +287,13 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     if not text:
         return
 
+    log.info("📥 Received Telegram text from %s: %s", update.effective_user.id if update.effective_user else "unknown", text)
+    try:
+        import memory
+        memory.add_chat_message("user", text)
+    except Exception:
+        pass
+
     # Autonomous Zero-Hallucination Social Media & SEO Dispatcher
     handled = await _handle_social_and_seo_direct(update, context, text)
     if handled:
