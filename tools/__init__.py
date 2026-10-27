@@ -13,7 +13,7 @@ from tools import (
     tech_radar, video_assembler, video_autocaption, voice_studio, web_reader, web_search,
     whatsapp_bridge, workspace_coder, youtube_tools, youtube_publisher, video_director,
     tiktok_publisher, long_video_studio, motion_studio, engineering_calculators, website_manager,
-    lead_hunter, social_studio, live_data_hub,
+    lead_hunter, social_studio, live_data_hub, instagram_publisher, social_dispatcher,
 )
 
 log = logging.getLogger("tools")
@@ -30,7 +30,7 @@ _MODULES = [
     jobs, brief, experience_tools, insights, outreach, gmail_tools, calendar_tools, youtube_tools, social_reach,
     media_studio, lead_pipeline_bridge, document_vision, codync_manager, cloud_tunnel, proposal_pdf_builder,
     carousel_builder, apk_inspector, live_lead_scraper, mikrotik_manager, license_generator, finance_tracker,
-    code_auditor, gmaps_lead_kit, video_autocaption, youtube_publisher, video_director, tiktok_publisher,
+    code_auditor, gmaps_lead_kit, video_autocaption, youtube_publisher, video_director, tiktok_publisher, instagram_publisher, social_dispatcher,
     long_video_studio, motion_studio,
 ]
 _TOOLS = {t["name"]: t for m in _MODULES for t in m.TOOLS}

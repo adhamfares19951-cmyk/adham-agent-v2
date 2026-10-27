@@ -71,6 +71,20 @@ SUPPORTED_PLATFORMS = {
         "verify_url": "https://www.upwork.com/nx/find-work/",
         "login_indicators": ["my-jobs", "messages", "profile"],
     },
+    "tiktok": {
+        "name": "تيك توك (TikTok)",
+        "domain": "tiktok.com",
+        "home_url": "https://www.tiktok.com",
+        "verify_url": "https://www.tiktok.com/tiktokstudio/content",
+        "login_indicators": ["tiktokstudio", "upload", "profile", "logout"],
+    },
+    "snapchat": {
+        "name": "سناب شات (Snapchat)",
+        "domain": "snapchat.com",
+        "home_url": "https://web.snapchat.com",
+        "verify_url": "https://accounts.snapchat.com",
+        "login_indicators": ["profile", "logout", "settings"],
+    },
 }
 
 USER_AGENT = (

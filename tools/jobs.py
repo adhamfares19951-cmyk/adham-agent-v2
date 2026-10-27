@@ -418,9 +418,13 @@ async def _scheduled_scan(context: ContextTypes.DEFAULT_TYPE) -> None:
 def setup(app: Application) -> None:
     global _app
     _app = app
-    app.job_queue.run_repeating(_scheduled_scan, interval=config.JOB_SCAN_MINUTES * 60,
-                                first=60, name="job-scan")
-    log.info("Job monitor: every %d minutes", config.JOB_SCAN_MINUTES)
+    # Only run scheduled scan if explicitly enabled in config
+    if getattr(config, "ENABLE_AUTO_JOB_SCAN", False):
+        app.job_queue.run_repeating(_scheduled_scan, interval=config.JOB_SCAN_MINUTES * 60,
+                                    first=60, name="job-scan")
+        log.info("Job monitor: every %d minutes", config.JOB_SCAN_MINUTES)
+    else:
+        log.info("Automatic job scan is DISABLED to prevent interrupting business operations.")
 
 
 # ---------------------------------------------------------------- Telegram handlers

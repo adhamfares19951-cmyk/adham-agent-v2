@@ -13,7 +13,7 @@ from typing import Any
 import httpx
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, PlainTextResponse, Response
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
 
@@ -177,6 +177,17 @@ async def home_page(request: Request):
     )
 
 
+@app.get("/glamp", response_class=HTMLResponse)
+async def glamp_landing_page(request: Request):
+    """Renders high-converting COD dropshipping landing page for G-Lamp 4-in-1."""
+    base = _get_base_url()
+    return templates.TemplateResponse(
+        request=request,
+        name="glamp_landing.html",
+        context={"base_url": base},
+    )
+
+
 @app.get("/api/products")
 async def get_products_api():
     """Returns active products list as JSON."""
@@ -277,6 +288,88 @@ async def get_stats_api():
         }
     except Exception as e:
         return {"status": "error", "detail": str(e)}
+
+
+@app.get("/logo")
+async def get_logo_ai():
+    """Returns the luxury 3D AI logo."""
+    logo_path = BASE_DIR / "logo_ai.jpg"
+    if logo_path.exists():
+        return FileResponse(str(logo_path), media_type="image/jpeg")
+    raise HTTPException(status_code=404, detail="Logo not found")
+
+
+@app.get("/logo-vector")
+async def get_logo_vector():
+    """Returns the clean vector badge logo."""
+    logo_path = BASE_DIR / "logo_vector.png"
+    if logo_path.exists():
+        return FileResponse(str(logo_path), media_type="image/png")
+    raise HTTPException(status_code=404, detail="Vector logo not found")
+
+
+@app.get("/video")
+async def get_ad_video():
+    """Returns the ready-to-post 9:16 TikTok / Reels / Snap ad video."""
+    vid_path = Path("C:/Projects/adham-agent/workspace_data/media/glamp_tiktok_final.mp4")
+    if vid_path.exists():
+        return FileResponse(str(vid_path), media_type="video/mp4", filename="glamp_ad.mp4")
+    raise HTTPException(status_code=404, detail="Video not found")
+
+
+
+
+def _get_base_url() -> str:
+    return (memory.get_setting("public_web_url") or "http://127.0.0.1:8080").rstrip("/")
+
+
+
+@app.get("/a8f3b2e7c9d14682b5e0f7193245cba8.txt", response_class=PlainTextResponse)
+async def get_indexnow_key():
+    """IndexNow search engine verification key file."""
+    return PlainTextResponse("a8f3b2e7c9d14682b5e0f7193245cba8", media_type="text/plain")
+
+@app.get("/robots.txt", response_class=PlainTextResponse)
+async def get_robots_txt():
+    """Search Engine crawling permissions & dynamic sitemap declaration."""
+    base = _get_base_url()
+    content = (
+        "User-agent: *\n"
+        "Allow: /\n"
+        "Allow: /glamp\n"
+        "Allow: /logo\n"
+        "Allow: /logo-vector\n"
+        "Allow: /video\n"
+        f"Sitemap: {base}/sitemap.xml\n"
+    )
+    return PlainTextResponse(content, media_type="text/plain")
+
+
+@app.get("/sitemap.xml")
+async def get_sitemap_xml():
+    """Dynamic XML Sitemap for Google, Bing, and Search Engine indexers."""
+    base = _get_base_url()
+    xml_content = f"""<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
+  <url>
+    <loc>{base}/</loc>
+    <lastmod>2026-10-27</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>{base}/glamp</loc>
+    <lastmod>2026-10-27</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+    <image:image>
+      <image:loc>{base}/logo</image:loc>
+      <image:title>مصباح G-Lamp الذكي 4 في 1</image:title>
+    </image:image>
+  </url>
+</urlset>"""
+    return Response(content=xml_content, media_type="application/xml")
 
 
 @app.get("/health")
