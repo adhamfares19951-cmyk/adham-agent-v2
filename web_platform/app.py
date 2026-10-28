@@ -336,7 +336,7 @@ async def get_logo_vector():
 @app.get("/video")
 async def get_ad_video():
     """Returns the latest ready-to-post 9:16 TikTok / Reels / Snap ad video."""
-    vid_path = Path("C:/Projects/adham-agent/workspace_data/media/glamp_tiktok_angle2.mp4")
+    vid_path = Path("C:/Projects/adham-agent/workspace_data/media/glamp_tiktok_emirati_v4.mp4")
     if not vid_path.exists():
         vid_path = Path("C:/Projects/adham-agent/workspace_data/media/glamp_tiktok_final.mp4")
     if vid_path.exists():
