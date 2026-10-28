@@ -147,6 +147,7 @@ async def reply(text: str, *, use_history: bool = True, save: bool = True) -> st
     
     answer = ""
     seen_calls = set()
+    tools_executed: list[str] = []
     pinned_provider = getattr(llm, "main_name", None)
 
     for step in range(MAX_STEPS):
@@ -179,6 +180,7 @@ async def reply(text: str, *, use_history: bool = True, save: bool = True) -> st
             else:
                 seen_calls.add(call_sig)
                 result = await tools.run(name, args)
+                tools_executed.append(f"{name}: {str(result)[:40].strip()}")
 
             msgs.append({
                 "role": "tool",
@@ -208,7 +210,8 @@ async def reply(text: str, *, use_history: bool = True, save: bool = True) -> st
 
     if save:
         memory.add_message("user", text)
-        memory.add_message("assistant", answer)
+        t_sum = "; ".join(tools_executed)[:300] if tools_executed else None
+        memory.add_message("assistant", answer, tools_summary=t_sum)
 
     if hasattr(r, "provider") and r.provider and r.provider != getattr(llm, "main_name", ""):
         answer += f"\n\nℹ️ <i>جاوبتك عن طريق المزود الاحتياطي ({r.provider}).</i>"

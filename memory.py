@@ -24,12 +24,31 @@ def _db():
 
 def init_db() -> None:
     with _db() as c:
+        try:
+            c.execute("ALTER TABLE chat_history ADD COLUMN tools_summary TEXT;")
+        except Exception:
+            pass
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS conversation_summary (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                summary TEXT NOT NULL,
+                last_message_id INTEGER,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
         c.executescript("""
             CREATE TABLE IF NOT EXISTS chat_history (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 role TEXT,
                 content TEXT,
+                tools_summary TEXT,
                 timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE TABLE IF NOT EXISTS conversation_summary (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                summary TEXT NOT NULL,
+                last_message_id INTEGER,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
             );
             CREATE TABLE IF NOT EXISTS facts (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -231,32 +250,131 @@ def init_db() -> None:
 
 
 # ---------------------------------------------------------------- conversation history
+# Wave 2.1: Tool turns persistence (tools_summary <= 300 chars), rolling summarization,
+# uploaded file placeholder, and async wrappers.
+import asyncio
 
-def add_message(role: str, content: str) -> None:
+
+def _check_and_roll_summary(c: sqlite3.Connection) -> None:
+    """Summarizes older conversation turns into conversation_summary when history exceeds budget."""
+    try:
+        count_row = c.execute("SELECT COUNT(*) FROM chat_history").fetchone()
+        total = count_row[0] if count_row else 0
+        if total > 18:
+            # Keep the newest 12 messages raw; summarize all older ones
+            cutoff_row = c.execute(
+                "SELECT id FROM chat_history ORDER BY id DESC LIMIT 1 OFFSET 12"
+            ).fetchone()
+            if cutoff_row:
+                cutoff = cutoff_row[0]
+                old_rows = c.execute(
+                    "SELECT id, role, content, tools_summary FROM chat_history WHERE id <= ? ORDER BY id ASC",
+                    (cutoff,),
+                ).fetchall()
+                if old_rows:
+                    summary_snippets = []
+                    for r in old_rows:
+                        speaker = "أدهم" if r["role"] == "user" else "البوت"
+                        ts = f" (أدوات: {r['tools_summary']})" if r["tools_summary"] else ""
+                        summary_snippets.append(f"{speaker}: {str(r['content'])[:75]}{ts}")
+                    compact_chunk = " | ".join(summary_snippets[-6:])
+
+                    existing = c.execute("SELECT summary FROM conversation_summary ORDER BY id DESC LIMIT 1").fetchone()
+                    if existing and existing[0]:
+                        combined_summary = f"{existing[0]} | {compact_chunk}"[-900:]
+                    else:
+                        combined_summary = compact_chunk[-900:]
+
+                    c.execute(
+                        "INSERT INTO conversation_summary (summary, last_message_id) VALUES (?, ?)",
+                        (combined_summary, cutoff),
+                    )
+                    c.execute("DELETE FROM chat_history WHERE id <= ?", (cutoff,))
+    except Exception as e:
+        pass
+
+
+def add_message(role: str, content: str, tools_summary: str | None = None) -> None:
+    """Adds a message to history with compact tools_summary and file truncation."""
     if not content:
         return
+
+    # Wave 2.1: Do not store massive uploaded file content as user message
+    if role == "user" and len(content) > 1000:
+        if "[ملف" in content or "Content-Type:" in content or content.startswith("%PDF-") or "base64" in content:
+            content = f"[ملف: محتوى مرفق بحجم {len(content)} حرف تم تحليله بنجاح]"
+
+    clean_summary = tools_summary[:300].strip() if tools_summary else None
+
     with _db() as c:
-        c.execute("INSERT INTO chat_history (role, content) VALUES (?, ?)", (role, content))
+        c.execute(
+            "INSERT INTO chat_history (role, content, tools_summary) VALUES (?, ?, ?)",
+            (role, content, clean_summary),
+        )
+        _check_and_roll_summary(c)
+
+
+# Wave 2.1: Add alias for add_chat_message
+add_chat_message = add_message
 
 
 def get_history(limit: int) -> list[dict]:
+    """Retrieves history including rolling summary anchor and compact tool turns."""
     with _db() as c:
+        sum_row = c.execute("SELECT summary FROM conversation_summary ORDER BY id DESC LIMIT 1").fetchone()
         rows = c.execute(
-            "SELECT role, content FROM chat_history ORDER BY id DESC LIMIT ?", (limit,)
+            "SELECT role, content, tools_summary FROM chat_history ORDER BY id DESC LIMIT ?", (limit,)
         ).fetchall()
-    history = [
-        {"role": "user" if r["role"] == "user" else "assistant", "content": r["content"]}
-        for r in reversed(rows)
-    ]
-    # Start with a user message so every provider accepts the order.
+
+    history = []
+    for r in reversed(rows):
+        body = r["content"]
+        if r["role"] != "user" and r["tools_summary"]:
+            body += f"\n[ملخص إجراءات الأدوات: {r['tools_summary']}]"
+        history.append({
+            "role": "user" if r["role"] == "user" else "assistant",
+            "content": body,
+        })
+
+    # Prepend rolling summary anchor if present
+    if sum_row and sum_row[0]:
+        history = [
+            {"role": "user", "content": f"[ملخص المحادثات والقرارات السابقة مع أدهم]:\n{sum_row[0]}"},
+            {"role": "assistant", "content": "تمام يا أدهم، مستحضر كافة النقاط والقرارات السابقة وجاهز لمتابعة العمل معك."},
+        ] + history
+
+    # Ensure conversation starts with a user message
     while history and history[0]["role"] != "user":
         history.pop(0)
+
     return history
 
 
 def clear_history() -> None:
     with _db() as c:
         c.execute("DELETE FROM chat_history")
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS conversation_summary (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                summary TEXT NOT NULL,
+                last_message_id INTEGER,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+        c.execute("DELETE FROM conversation_summary")
+
+
+# Async wrappers for non-blocking event-loop execution (Rule 8 & Wave 2.1)
+async def async_add_message(role: str, content: str, tools_summary: str | None = None) -> None:
+    await asyncio.to_thread(add_message, role, content, tools_summary)
+
+
+async def async_get_history(limit: int) -> list[dict]:
+    return await asyncio.to_thread(get_history, limit)
+
+
+async def async_clear_history() -> None:
+    await asyncio.to_thread(clear_history)
 
 
 # ---------------------------------------------------------------- saved facts

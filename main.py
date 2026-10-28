@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import io
+import asyncio
 import json
 import logging
 import os
@@ -306,6 +307,37 @@ async def _handle_social_and_seo_direct(update: Update, context: ContextTypes.DE
 
     return False
 
+_chat_locks: dict[int, asyncio.Lock] = {}
+
+def get_chat_lock(chat_id: int) -> asyncio.Lock:
+    """Per-chat lock so heavy generation doesn't block /reset, commands, or buttons."""
+    if chat_id not in _chat_locks:
+        _chat_locks[chat_id] = asyncio.Lock()
+    return _chat_locks[chat_id]
+
+
+async def _run_with_typing(bot, chat_id: int, coro):
+    """Refreshes the Telegram typing action every ~4 seconds during execution."""
+    stop_event = asyncio.Event()
+
+    async def _typing_loop():
+        while not stop_event.is_set():
+            try:
+                await bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
+            except Exception:
+                pass
+            try:
+                await asyncio.wait_for(stop_event.wait(), timeout=4.0)
+            except asyncio.TimeoutError:
+                pass
+
+    typing_task = asyncio.create_task(_typing_loop())
+    try:
+        return await coro
+    finally:
+        stop_event.set()
+        await typing_task
+
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     text = (update.effective_message.text or "").strip()
     if not text:
@@ -319,9 +351,9 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         log.info("📥 Received Telegram text from %s (len=%d): %s", uid, len(text), preview)
     try:
         import memory
-        memory.add_chat_message("user", text)
-    except Exception:
-        pass
+        memory.add_message("user", text)
+    except Exception as e:
+        log.warning("Could not record initial user message: %s", e)
 
     # Autonomous Zero-Hallucination Social Media & SEO Dispatcher
     handled = await _handle_social_and_seo_direct(update, context, text)
@@ -355,7 +387,9 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             await update.effective_message.reply_text(msg)
         return
 
-    await _answer(update, context, text)
+    chat_id = update.effective_chat.id if update.effective_chat else config.OWNER_ID
+    async with get_chat_lock(chat_id):
+        await _run_with_typing(context.bot, chat_id, _answer(update, context, text))
 
 
 async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -2779,7 +2813,7 @@ def main() -> None:
         sys.exit(0)
     init_db()
 
-    app = Application.builder().token(config.TELEGRAM_TOKEN).post_init(post_init).build()
+    app = Application.builder().token(config.TELEGRAM_TOKEN).post_init(post_init).concurrent_updates(True).build()
 
     owner = filters.User(user_id=config.OWNER_ID)
 

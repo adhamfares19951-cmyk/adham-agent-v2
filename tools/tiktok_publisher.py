@@ -16,6 +16,22 @@ from typing import Any
 
 log = logging.getLogger("tiktok_publisher")
 
+async def _safe_goto(page, url: str, wait_until: str = "domcontentloaded", timeout: int = 60000, max_retries: int = 2) -> None:
+    """Navigates to URL with automatic retry and graceful Arabic error reporting (Wave 2.3)."""
+    for attempt in range(max_retries):
+        try:
+            await page.goto(url, wait_until=wait_until, timeout=timeout)
+            return
+        except Exception as e:
+            if attempt < max_retries - 1:
+                log.warning("Page.goto timed out on %s (attempt %d). Retrying with 90s timeout...", url, attempt + 1)
+                await asyncio.sleep(3)
+                timeout = 90000
+            else:
+                log.error("Page.goto permanently timed out on %s: %s", url, e)
+                raise RuntimeError(f"تعذر فتح صفحة TikTok Studio ({url}) بسبب بطء استجابة خوادم تيك توك. تم أخذ مهلة إضافية ولكن انتهى الوقت المسموح.")
+
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 SESSIONS_DIR = BASE_DIR / "sessions"
 SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
@@ -149,7 +165,7 @@ async def upload_video(
         try:
             # 1. Navigate to modern TikTok Studio upload page
             log.info("Navigating to TikTok Studio upload page...")
-            await page.goto("https://www.tiktok.com/tiktokstudio/upload", wait_until="domcontentloaded", timeout=45000)
+            await _safe_goto(page, "https://www.tiktok.com/tiktokstudio/upload", wait_until="domcontentloaded", timeout=60000)
             await asyncio.sleep(4)
 
             # Check if login is required
@@ -328,7 +344,7 @@ async def get_tiktok_stats() -> dict[str, Any]:
         page = browser.pages[0] if browser.pages else await browser.new_page()
         try:
             log.info("Opening TikTok Studio Content Manager for live analytics...")
-            await page.goto("https://www.tiktok.com/tiktokstudio/content", wait_until="domcontentloaded", timeout=30000)
+            await _safe_goto(page, "https://www.tiktok.com/tiktokstudio/content", wait_until="domcontentloaded", timeout=60000)
             await asyncio.sleep(5)
             await page.screenshot(path=str(proof_path))
 

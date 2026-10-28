@@ -70,7 +70,7 @@ async def _telegram_items(channel: str) -> list[Item]:
     resp = await client.get(f"https://t.me/s/{channel}")
     resp.raise_for_status()
     items = []
-    for block in resp.text.split('class="tgme_widget_message_wrap')[1:]:
+    for block in resp_text.split('class="tgme_widget_message_wrap')[1:]:
         post = re.search(r'data-post="([^"]+)"', block)
         body = re.search(r'<div class="tgme_widget_message_text[^>]*>(.*?)</div>', block, re.S)
         if not post or not body:
@@ -82,13 +82,45 @@ async def _telegram_items(channel: str) -> list[Item]:
     return items  # oldest first
 
 
+_paused_sources: set[str] = set()
+
 async def _website_items(name: str, url: str, pattern: str, details: bool) -> list[Item]:
-    resp = await client.get(url)
-    resp.raise_for_status()
+    if name in _paused_sources:
+        log.debug("Skipping paused source %s (preventing 403 spam)", name)
+        return []
+
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "ar,en-US;q=0.9,en;q=0.8",
+    }
+    resp_text = ""
+    try:
+        resp = await client.get(url, headers=headers)
+        resp.raise_for_status()
+        resp_text = resp_text
+    except Exception as e:
+        status_code = getattr(getattr(e, "response", None), "status_code", None)
+        if status_code == 403:
+            log.warning("Source %s returned 403 Forbidden. Trying session fetch or marking paused.", name)
+            try:
+                from tools import session_manager
+                sess_html = await session_manager.fetch_with_session(name, url)
+                if sess_html and len(sess_html) > 500 and "403" not in sess_html[:200]:
+                    resp_text = sess_html
+                else:
+                    _paused_sources.add(name)
+                    return []
+            except Exception:
+                _paused_sources.add(name)
+                return []
+        else:
+            log.warning("Website fetch error for %s (%s): %s", name, url, e)
+            return []
     base = re.match(r"https?://[^/]+", url).group(0)
     found: dict[str, list[str]] = {}
     links: dict[str, str] = {}
-    for m in re.finditer(r'<a\s[^>]*href="(' + pattern + r')"[^>]*>(.*?)</a>', resp.text, re.S):
+    for m in re.finditer(r'<a\s[^>]*href="(' + pattern + r')"[^>]*>(.*?)</a>', resp_text, re.S):
         link, item_id, label = html.unescape(m.group(1)), m.group(2), _clean(m.group(3))
         links.setdefault(item_id, link if link.startswith("http") else base + link)
         if label and label not in found.setdefault(item_id, []):

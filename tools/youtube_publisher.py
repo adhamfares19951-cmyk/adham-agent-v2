@@ -25,6 +25,18 @@ from googleapiclient.http import MediaFileUpload
 
 log = logging.getLogger("youtube_publisher")
 
+_invalid_grant_detected = False
+
+REAUTH_INSTRUCTIONS_AR = (
+    "⚠️ **توكن يوتيوب منتهي الصلاحية (invalid_grant):**\n\n"
+    "انتهت صلاحية مفتاح الربط مع يوتيوب، ويلزم إعادة التوثيق لمرة واحدة باتباع الخطوات التالية:\n"
+    "1️⃣ افتح مجلد المشروع C:\\Projects\\adham-agent.\n"
+    "2️⃣ اضغط مرتين على ملف setup_youtube.bat لتشغيله.\n"
+    "3️⃣ ستفتح نافذة متصفح تطلب منك تسجيل الدخول بحساب Google/YouTube.\n"
+    "4️⃣ وافق على الصلاحيات، وستظهر رسالة نجاح في المتصفح وسيتم تجديد التوكن تلقائياً."
+)
+
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 SESSIONS_DIR = BASE_DIR / "sessions"
 SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
@@ -61,12 +73,23 @@ def get_authenticated_service():
             log.warning("Corrupt token file: %s", e)
 
     if not creds or not creds.valid:
+        global _invalid_grant_detected
+        if _invalid_grant_detected:
+            log.warning("YouTube re-authorization needed (invalid_grant). Skipping automatic refresh retry.")
+            raise RuntimeError(REAUTH_INSTRUCTIONS_AR)
+
         if creds and creds.expired and creds.refresh_token:
             try:
                 creds.refresh(Request())
                 with open(TOKEN_FILE, "w", encoding="utf-8") as f:
                     f.write(creds.to_json())
+                _invalid_grant_detected = False
             except Exception as e:
+                err_str = str(e).lower()
+                if "invalid_grant" in err_str:
+                    _invalid_grant_detected = True
+                    log.error("YouTube token permanently expired (invalid_grant): %s", e)
+                    raise RuntimeError(REAUTH_INSTRUCTIONS_AR)
                 log.error("Failed to refresh YouTube token: %s", e)
                 creds = None
 
