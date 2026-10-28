@@ -26,3 +26,10 @@
 
 ## Contact
 - Phone and email are in his CV file; in cover letters leave placeholders [Phone] and [Email] unless he gives them.
+
+## سياق الأعمال والمشاريع (Business & Store Context)
+*(تنبيه للنموذج: هذه البيانات مرجعية للتذكير وقد تكون متغيرة — تحقق دائماً عبر الأداة المناسبة قبل الجزم بحالتها الحالية أو إعطاء أرقام عنها)*:
+- المتجر الإلكتروني: Smart Store (رابط العرض: https://smartglamp.pages.dev)
+- حساب تيك توك: @coretradeai
+- حساب إنستغرام: @smartstore.gcc
+- ملف السيرة الذاتية الأساسي: dist_pages/MSF_Data_Entry_Adham_Alhabbash_CV.pdf (رابط دائم: https://smartglamp.pages.dev/cv.pdf)

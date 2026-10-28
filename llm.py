@@ -33,6 +33,26 @@ class RateLimitError(LLMError):
     pass
 
 
+class PayloadTooLargeError(LLMError):
+    """413 Request Too Large - skip provider for this request only without cooldown."""
+    pass
+
+
+class BillingError(LLMError):
+    """402 Insufficient balance - disable provider until restart."""
+    pass
+
+
+class AuthenticationError(LLMError):
+    """401/403/404 Invalid key or model - disable provider until restart."""
+    pass
+
+
+class ServerError(LLMError):
+    """5xx Server temporary error."""
+    pass
+
+
 RATE_LIMIT_MSG = "وصلنا لحد الاستخدام المجاني عند مزود الذكاء الاصطناعي ⏳ جرّب كمان شوي يا أدهم."
 NETWORK_MSG = "ما قدرت أتصل بمزود الذكاء الاصطناعي 🌐 تأكد من الإنترنت وجرّب كمان مرة."
 EMPTY_MSG = "ما وصلني رد من الذكاء الاصطناعي، جرّب تعيد صياغة رسالتك."
@@ -371,58 +391,73 @@ class FallbackLLM:
 
 class SmartRouter(FallbackLLM):
     """Enterprise Intelligent Hybrid Router for LLM workloads.
-    Routes queries to specialized providers based on task type:
-    - Coding, Networks & Architecture: OpenRouter (DeepSeek) / Strongest Model.
-    - Text Summaries & Initial Triage: Ollama (Local/Cost-Effective) / Fast Model.
-    - General & Fast Tool Use: Follows configured PROVIDER_ORDER with automatic Fallback.
+    Wave 1.4: Token boundary task classification, error classification (413 trim, 402/401 disable,
+    429/5xx backoff), token estimation before dispatch, pinned provider per loop.
     """
+
+    PROVIDER_LIMITS = {
+        "groq": 8000,
+        "cloudflare": 8000,
+        "ollama": 8000,
+        "mistral": 32000,
+        "openrouter": 64000,
+        "gemini": 1000000,
+    }
 
     def __init__(self, providers: list):
         super().__init__(providers)
         self._provider_map: dict[str, tuple[str, object]] = {
             name.lower(): (name, prov) for name, prov in self.providers
         }
+        self._disabled_providers: set[str] = set()
+        self._failure_counts: dict[str, int] = {}
+
+    @staticmethod
+    def estimate_tokens(system: str, messages: list[dict], tools: list[dict] | None = None) -> int:
+        chars = len(system) + sum(len(str(m.get("content") or "")) for m in messages)
+        if tools:
+            import json
+            chars += len(json.dumps(tools, ensure_ascii=False))
+        return int(chars / 3.5)
 
     @staticmethod
     def detect_task_type(system: str, messages: list[dict]) -> str:
-        """Heuristic detection of task type from prompt content."""
+        import re
         user_content = ""
         for m in reversed(messages):
             if m.get("role") == "user" and isinstance(m.get("content"), str):
                 user_content = m["content"].lower()
                 break
 
-        # Coding / Network / Solar / Scripting indicators
-        coding_signals = (
-            "code", "coding", "python", "javascript", "typescript", "flutter", "laravel",
-            "script", "bug", "debug", "error", "traceback", "function", "class", "github",
-            "repo", "mikrotik", "routeros", "subnet", "vlan", "cidr", "ip", "nat", "dhcp",
-            "solar", "inverter", "battery", "photovoltaic", "sql", "sqlite", "api", "endpoint",
-            "كود", "برمجة", "سكربت", "دالة", "خطأ", "تصحيح", "شبكة", "ميكروتك", "راوتر",
-            "طاقة شمسية", "انفرتر", "بطارية", "ألواح", "الواح", "سولار", "قاعدة بيانات", "سيرفر"
-        )
-        # Summarization / Triage indicators
-        summary_signals = (
-            "summarize", "summary", "brief", "digest", "triage", "classify", "tldr",
-            "تلخيص", "ملخص", "لخص", "لخصلي", "اختصر", "اختصار", "مختصر", "موجز", "أوجز",
-            "فرز", "تصنيف", "استخرج رؤوس الأقلام", "رؤوس أقلام"
-        )
+        latin_tokens = set(re.findall(r'\b[a-z0-9_]+\b', user_content))
+        arabic_tokens = set(re.findall(r'[\u0600-\u06FF]+', user_content))
 
-        if any(sig in user_content for sig in summary_signals):
+        coding_latin = {
+            "code", "coding", "python", "javascript", "typescript", "flutter", "laravel",
+            "script", "bug", "debug", "traceback", "function", "class", "github",
+            "repo", "mikrotik", "routeros", "subnet", "vlan", "cidr", "dhcp",
+            "solar", "inverter", "battery", "photovoltaic", "sql", "sqlite"
+        }
+        coding_arabic = {
+            "كود", "برمجة", "سكربت", "دالة", "تصحيح", "شبكة", "ميكروتك", "راوتر",
+            "انفرتر", "بطارية", "الواح", "ألواح", "سولار", "سيرفر"
+        }
+
+        summary_latin = {"summarize", "summary", "brief", "digest", "triage", "tldr"}
+        summary_arabic = {"تلخيص", "ملخص", "لخص", "اختصر", "اختصار", "موجز"}
+
+        if (latin_tokens & summary_latin) or (arabic_tokens & summary_arabic):
             return "summary"
-        if any(sig in user_content for sig in coding_signals):
+        if (latin_tokens & coding_latin) or (arabic_tokens & coding_arabic):
             return "coding"
         return "general"
 
     def _get_candidates_for_task(self, task_type: str) -> list[tuple[str, object]]:
-        """Return candidate providers prioritized for the task type."""
         task = (task_type or "general").lower().strip()
         if task in ("coding", "network", "code"):
-            # OpenRouter (DeepSeek) preferred for complex coding and network engineering
-            priority = ["openrouter", "gemini", "mistral", "groq", "ollama"]
+            priority = ["gemini", "mistral", "openrouter", "groq", "ollama"]
         elif task in ("summary", "fast", "triage"):
-            # Ollama (Local/Zero-cost) preferred for summaries and fast triage
-            priority = ["ollama", "groq", "mistral", "gemini", "openrouter"]
+            priority = ["gemini", "groq", "mistral", "ollama", "openrouter"]
         else:
             return self.providers
 
@@ -445,6 +480,7 @@ class SmartRouter(FallbackLLM):
         messages: list[dict],
         tools: list[dict] | None = None,
         task_type: str = "auto",
+        pinned_provider: str | None = None,
     ) -> Reply:
         if not task_type or task_type == "auto":
             effective_task = self.detect_task_type(system, messages)
@@ -452,102 +488,80 @@ class SmartRouter(FallbackLLM):
             effective_task = task_type.lower().strip()
 
         candidates_all = self._get_candidates_for_task(effective_task)
+        
+        # Filter permanently disabled providers (402 balance / 401 invalid key)
+        available = [(n, p) for n, p in candidates_all if n.lower() not in self._disabled_providers]
+
+        # Prioritize pinned provider if valid
+        if pinned_provider:
+            pinned_match = [(n, p) for n, p in available if n.lower() == pinned_provider.lower()]
+            if pinned_match:
+                available = pinned_match + [cp for cp in available if cp[0].lower() != pinned_provider.lower()]
+
         now = time.monotonic()
-        ready = [(n, p) for n, p in candidates_all if self._resting_until.get(n, 0) <= now]
-        candidates = ready or candidates_all
+        ready = [(n, p) for n, p in available if self._resting_until.get(n, 0) <= now]
+        candidates = ready or available
 
+        if not candidates:
+            raise LLMError("جميع مزودي الذكاء الاصطناعي معطلون حالياً. يرجى مراجعة أرصدة ومفاتيح .env.")
+
+        estimated_tokens = self.estimate_tokens(system, messages, tools)
         last_error = None
+
         for name, provider in candidates:
-            try:
-                reply = await provider.generate(system, messages, tools)
-            except LLMError as e:
-                log.warning("[SmartRouter] Provider %s failed on task=%s (%s), triggering fallback",
-                            name, effective_task, e.user_message)
-                self._resting_until[name] = time.monotonic() + self.COOLDOWN
-                last_error = e
-                continue
-            except Exception as e:
-                log.warning("[SmartRouter] Provider %s unexpected error (%s), triggering fallback", name, e)
-                self._resting_until[name] = time.monotonic() + self.COOLDOWN
-                last_error = LLMError(f"خطأ أثناء الاتصال بمزود {name}")
+            # Skip provider if estimated tokens exceed its limit
+            p_limit = self.PROVIDER_LIMITS.get(name.lower(), 16000)
+            if estimated_tokens > p_limit:
+                log.info("[SmartRouter] Skipping %s: estimated tokens %s > limit %s", name, estimated_tokens, p_limit)
                 continue
 
-            self._resting_until.pop(name, None)
-            reply.provider = name
-            return reply
+            for attempt in range(2):
+                try:
+                    reply = await provider.generate(system, messages, tools)
+                    self._resting_until.pop(name, None)
+                    self._failure_counts.pop(name, None)
+                    reply.provider = name
+                    return reply
+
+                except PayloadTooLargeError as e:
+                    log.warning("[SmartRouter] Provider %s payload too large (%s). Skipping without cooldown.", name, e)
+                    last_error = e
+                    break
+
+                except (BillingError, AuthenticationError) as e:
+                    log.error("[SmartRouter] Disabling provider %s until restart: %s", name, e)
+                    self._disabled_providers.add(name.lower())
+                    last_error = e
+                    break
+
+                except (RateLimitError, ServerError) as e:
+                    last_error = e
+                    if attempt == 0:
+                        delay = 1.5 + (0.5 * (time.monotonic() % 1))
+                        log.warning("[SmartRouter] Transient error on %s (%s). Retrying in %.2fs...", name, e, delay)
+                        await asyncio.sleep(delay)
+                        continue
+                    else:
+                        log.warning("[SmartRouter] Provider %s failed after retry. Setting cooldown.", name)
+                        self._resting_until[name] = time.monotonic() + self.COOLDOWN
+                        self._failure_counts[name] = self._failure_counts.get(name, 0) + 1
+                        break
+
+                except LLMError as e:
+                    log.warning("[SmartRouter] Provider %s LLMError: %s", name, e.user_message)
+                    self._resting_until[name] = time.monotonic() + self.COOLDOWN
+                    last_error = e
+                    break
+
+                except Exception as e:
+                    log.warning("[SmartRouter] Provider %s unexpected error: %s", name, e)
+                    self._resting_until[name] = time.monotonic() + self.COOLDOWN
+                    last_error = LLMError(f"خطأ أثناء الاتصال بمزود {name}: {e}")
+                    break
 
         raise last_error or LLMError(EMPTY_MSG)
 
-    async def route_task(
-        self,
-        task_type: str,
-        system: str,
-        messages: list[dict],
-        tools: list[dict] | None = None,
-    ) -> Reply:
-        """Explicitly route a task of a given type."""
-        return await self.generate(system, messages, tools, task_type=task_type)
-
-
-async def check_models_status() -> dict:
-    """Live probe of key providers (Ollama, OpenRouter, Gemini) for Telegram dashboard."""
-    import httpx
-
-    status_report = {
-        "ollama": {"status": "غير مفعل", "latency_ms": None, "model": config.OLLAMA_MODEL, "endpoint": config.OLLAMA_BASE_URL},
-        "openrouter": {"status": "غير مفعل", "latency_ms": None, "model": config.OPENROUTER_MODEL, "endpoint": "https://openrouter.ai"},
-        "gemini": {"status": "غير مفعل", "latency_ms": None, "model": config.MODEL, "endpoint": "Google GenAI"},
-    }
-
-    # 1. Probe Ollama (Local/Cloud HTTP check)
-    try:
-        t0 = time.monotonic()
-        # Parse host for tags endpoint
-        base_root = config.OLLAMA_BASE_URL.split("/v1")[0]
-        async with httpx.AsyncClient(timeout=3.0) as client:
-            resp = await client.get(f"{base_root}/api/tags")
-            latency = int((time.monotonic() - t0) * 1000)
-            if resp.status_code == 200:
-                status_report["ollama"]["status"] = f"🟢 متصل ومتاح ({latency}ms)"
-                status_report["ollama"]["latency_ms"] = latency
-            else:
-                status_report["ollama"]["status"] = f"🟡 يعمل (رمز {resp.status_code})"
-    except Exception:
-        status_report["ollama"]["status"] = "🔴 غير متصل حالياً (محلي)"
-
-    # 2. Probe OpenRouter
-    if config.OPENROUTER_API_KEY:
-        try:
-            t0 = time.monotonic()
-            headers = {
-                "Authorization": f"Bearer {config.OPENROUTER_API_KEY}",
-                "HTTP-Referer": "https://github.com/adham-agent",
-                "X-Title": "Adham Agent Enterprise OS",
-            }
-            async with httpx.AsyncClient(timeout=4.0) as client:
-                resp = await client.get("https://openrouter.ai/api/v1/auth/key", headers=headers)
-                latency = int((time.monotonic() - t0) * 1000)
-                if resp.status_code == 200:
-                    status_report["openrouter"]["status"] = f"🟢 متصل ونشط ({latency}ms)"
-                    status_report["openrouter"]["latency_ms"] = latency
-                else:
-                    status_report["openrouter"]["status"] = f"🟡 متاح (رمز {resp.status_code})"
-        except Exception:
-            status_report["openrouter"]["status"] = "🟡 مفعل (سحابي جاهز)"
-    else:
-        status_report["openrouter"]["status"] = "⚪ لا يوجد مفتاح"
-
-    # 3. Probe Gemini
-    if config.GEMINI_API_KEY:
-        status_report["gemini"]["status"] = "🟢 متصل ونشط (الأساسي)"
-    else:
-        status_report["gemini"]["status"] = "⚪ غير متاح"
-
-    return status_report
-
-
-_ROUTER_CACHE: SmartRouter | None = None
-
+_ROUTER_CACHE = None
 
 def get_llm() -> SmartRouter:
     """Builds and returns the configured SmartRouter singleton."""

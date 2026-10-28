@@ -160,7 +160,16 @@ async def consult_agency_expert(args: dict) -> str:
     )
 
 
-async def list_agency_experts(args: dict) -> str:
+async def list_agency_experts(args: dict | None = None, division: str = "", keyword: str = "", **kwargs) -> str:
+    params = {}
+    if isinstance(args, dict):
+        params.update(args)
+    if division:
+        params["division"] = division
+    if keyword:
+        params["keyword"] = keyword
+    params.update(kwargs)
+    args = params
     """List available Agency divisions or experts in a specific category."""
     division = args.get("division", "").strip().lower()
     keyword = args.get("keyword", "").strip().lower()

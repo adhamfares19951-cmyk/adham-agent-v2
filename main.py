@@ -1182,7 +1182,7 @@ async def experts_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     args = context.args or []
     div = args[0] if len(args) > 0 else ""
     from tools import agency_tools
-    res = agency_tools.list_agency_experts(division=div)
+    res = await agency_tools.list_agency_experts(division=div)
     await send_long(update, res)
 
 

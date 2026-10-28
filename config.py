@@ -81,3 +81,7 @@ if MORNING_BRIEF_TIME != "off":
 
 # ReliefWeb API name (free, must be approved by ReliefWeb). Empty = ReliefWeb not checked.
 RELIEFWEB_APPNAME = _get("RELIEFWEB_APPNAME", required=False)
+
+# LLM Generation Parameters
+LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0.3"))
+LLM_MAX_OUTPUT_TOKENS = int(os.getenv("LLM_MAX_OUTPUT_TOKENS", "4096"))
