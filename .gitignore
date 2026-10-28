@@ -44,3 +44,6 @@ facebook_saved_items.*
 agent_memory.db-*
 backups/
 bot.lock
+workspace_data/media/
+dist_pages/
+tiktok_table_dump.txt

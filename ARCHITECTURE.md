@@ -1,158 +1,83 @@
-# `adham-agent` Architecture & Workspace Context Rulebook
-> **Master Blueprint & Strict Operational Guidelines**  
-> *Target System*: Autonomous Multi-Agent System & Personal Digital Twin  
-> *Target Runtime*: Python 3.11+ / Windows & Linux VPS  
-
----
+# ARCHITECTURE.md — Reality-Aligned Master Blueprint
 
 ## 1. System Vision & Architecture Overview
+dham-agent is an asynchronous, zero-hallucination Telegram AI Agent and executive digital twin built for **Adham Al-Habbash**.
+It automates reminders, job opportunities evaluation, marketing, publishing, networking, and business tasks with deterministic tool execution and human-in-the-loop approval.
 
-`adham-agent` is an asynchronous, autonomous multi-agent swarm and digital twin designed to represent and execute technical operations on behalf of **Adham (أدهم)**. The system operates on a decentralized, task-driven blackboard architecture where specialized agents act on shared state rather than uncontrolled conversational loops.
-
-```
-                              ┌────────────────────────────────────────┐
-                              │      Inbound Ingress & Interfaces      │
-                              │  (Telegram Bot, CLI, Webhook Trigger)  │
-                              └───────────────────┬────────────────────┘
-                                                  │
-                                                  ▼
-                              ┌────────────────────────────────────────┐
-                              │       Master Brain / Orchestrator      │
-                              │     (Gemini Flash Structured Router)   │
-                              └───────────────────┬────────────────────┘
-                                                  │
-                     ┌────────────────────────────┼────────────────────────────┐
-                     ▼                            ▼                            ▼
-      ┌──────────────────────────┐  ┌──────────────────────────┐  ┌──────────────────────────┐
-      │      YouTube Agent       │  │   Hunter/Career Agent    │  │    Dev & Sys Agents      │
-      │ (SEO, Script, Auto-Pub)  │  │ (Scraper, Match, ATS CV) │  │ (Coding, VPS, MikroTik)  │
-      └──────────────┬───────────┘  └─────────────┬────────────┘  └─────────────┬────────────┘
-                     │                            │                             │
-                     └────────────────────────────┼─────────────────────────────┘
-                                                  ▼
-                              ┌────────────────────────────────────────┐
-                              │    Unified SQLite Blackboard Store     │
-                              │     (`agent_tasks`, `blackboard.db`)   │
-                              └───────────────────┬────────────────────┘
-                                                  │
-                                                  ▼
-                              ┌────────────────────────────────────────┐
-                              │            Dual-LLM Router             │
-                              │  Gemini 2.5 Flash  ◄►  DeepSeek Chat   │
-                              └────────────────────────────────────────┘
-```
+### Operational Stack:
+- **Runtime:** Python 3.11+ running locally on Windows.
+- **Process Supervisor:** start_watchdog.bat runs watchdog.py which supervises main.py.
+- **Single-Instance Enforcement:** Process ID lockfile ot.lock ensures zero Telegram conflict errors.
+- **Telegram Interface:** python-telegram-bot with Long Polling, drop_pending_updates=False, concurrent_updates(True), and per-chat syncio.Lock.
 
 ---
 
-## 2. The 5 Non-Negotiable Core Engineering Rules
+## 2. Core Subsystems
 
-Every developer, AI agent, and subagent modifying or interacting with this workspace MUST strictly obey these 5 core engineering rules:
+### A. Brain & Reasoning Loop (rain.py)
+- **System Prompt:** Ultra-concise (<= 1500 tokens), warm Levantine/Palestinian dialect, results-oriented, with dynamic slots for current time (<<NOW>>), calendar, profile facts, and few-shot examples.
+- **Zero-Hallucination Policy:** The agent never claims a fact, publication, or file unless returned by a real tool in the conversation turn.
+- **Loop Safeguards:** Max 25 steps per message; detects repeated identical tool calls and breaks loops; requests a final non-tool summary if MAX_STEPS is reached instead of crashing.
+- **Usage Counting:** Messages are counted towards DAILY_MESSAGE_LIMIT only after a successful reply.
 
-### Rule 1: No Chat Fluff in Inter-Agent Communication
-- Agents never communicate with each other through unstructured conversational banter, conversational tokens, or markdown chatter.
-- **Communication Protocol**:
-  - All inter-agent data exchanges, tool payloads, and task transfers must use **strict Pydantic schemas** (`pydantic.BaseModel` with typed fields).
-  - When invoking Gemini or DeepSeek for structured output, enforce `response_schema` / JSON Schema guarantees.
-  - State persistence, task claiming, progress updates, and completion artifacts are logged directly to the SQLite `agent_tasks` blackboard table:
-    ```sql
-    CREATE TABLE IF NOT EXISTS agent_tasks (
-        task_id TEXT PRIMARY KEY,
-        parent_task_id TEXT,
-        assigned_agent TEXT NOT NULL,
-        status TEXT CHECK(status IN ('PENDING', 'IN_PROGRESS', 'COMPLETED', 'FAILED')) NOT NULL,
-        input_payload JSON NOT NULL,
-        output_payload JSON,
-        error_message TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-    ```
+### B. Multi-Provider LLM Layer (llm.py)
+- **SmartRouter:** Orchestrates GeminiProvider (primary) with fallbacks to Groq, Mistral, OpenRouter, and local Ollama.
+- **Token Estimation & Circuit Breaking:** Estimates prompt tokens prior to dispatch; skips providers whose limits cannot fit the payload.
+- **Error Classification:**
+  - 413 Payload Too Large: Skips provider for the request without 5-minute cooldown.
+  - 402 Payment Required & 401/403/404: Disables provider until process restart.
+  - 429 Rate Limit & 5xx: Retries with exponential backoff + jitter.
+- **Pinned Provider:** The provider chosen at step 0 is pinned for the entire tool loop to maintain coherent context.
 
-### Rule 2: Modern Google SDK Enforcement
-- **MANDATORY**: Always use the official modern Google GenAI SDK:
-  ```python
-  from google import genai
-  from google.genai import types
-  ```
-- **STRICTLY FORBIDDEN**: Never import or invoke the legacy, deprecated `google.generativeai` package.
-- All Gemini calls must configure explicit model instances, typed generation parameters (`types.GenerateContentConfig`), and structured JSON response schemas when schema compliance is required.
+### C. Tool Registry & Intent Selection (	ools/)
+- **122 Executable Tools** categorized into 8 functional groups:
+  1. core: Memory, basic search, web reader, calendar. (Always active).
+  2. 
+eminders_jobs: Natural-language reminders, job hunter, career insights.
+  3. social_publishing: TikTok, Instagram, YouTube automation, social dispatcher.
+  4. 
+etwork_mikrotik: Subnet calculation, MikroTik router scripts, solar sizing.
+  5. dev_workspace: Git operations, workspace file management, server ops.
+  6. media: Motion masterclass, viral video assembly, edge-tts studio.
+  7. leads_sales: Verified B2B lead extraction, proposals, WhatsApp bridge, Gmail.
+  8. inance: Store products, client orders, financial ledger.
+- **Dynamic Selection (select_tools):** Limits tool schemas to <= 25 per turn based on user intent keywords.
+- **Validation & Sandboxing:** JSON schema validation of all tool arguments before handler invocation.
+- **Timeouts & Truncation:** syncio.wait_for (60s default, 180s for media) and result truncation at ~6,000 characters.
+- **Untrusted Source Delimiter:** Web and email outputs are demarcated as untrusted data to stop prompt injection.
 
-### Rule 3: Dual-Model Hybrid Routing Policy
-The system leverages a dual-engine architecture optimizing for latency, cost, and specialized technical reasoning:
-1. **Primary Engine — Google Gemini Flash (`gemini-2.5-flash`)**:
-   - Master Brain orchestration and high-level routing.
-   - Pydantic JSON structuring and extraction.
-   - Multimodal analysis (Video, Audio, Images, PDF inspection).
-   - Creative workflows: YouTube script ideation, viral hook composition, SEO tagging, and description generation.
-2. **Specialized Engine — DeepSeek (`deepseek-chat` / DeepSeek Coder via OpenAI client)**:
-   - Complex technical reasoning, code generation, script debugging, and AST refactoring.
-   - Algorithmic problem solving and system configuration (MikroTik scripting, Dockerfiles, SQL queries).
-3. **Resilience & Automatic Fallback**:
-   - If Gemini encounters rate limits (HTTP 429) or quota saturation, non-multimodal tasks automatically fail over to DeepSeek.
-   - If DeepSeek experiences latency spikes or connection timeouts, tasks route back to Gemini Flash with zero pipeline disruption.
+### D. Security & Approval Gate (Rule 14)
+- **Approval Queue:** All sensitive external operations (execute_server_command, workspace_write_file, self_modify_agent_code, social publishing, email sending) are diverted to the pproval_queue table and require explicit button approval (✅ / ✏️ / ❌).
+- **Shell Denylist:** Destructive commands (ormat, del /s, 
+mdir /s, powershell -enc, etc.) are blocked by a hard second layer.
 
-### Rule 4: Async-First Execution Standard
-- Concurrency is mandatory for multi-agent parallelism.
-- All LLM client calls (`genai.Client.aio` / `AsyncOpenAI`), database operations (`aiosqlite`), browser automation (`playwright.async_api`), and file I/O must be written as native `asyncio` coroutines.
-- Blocking synchronous operations (`time.sleep()`, synchronous `requests`, synchronous file locks) are strictly prohibited inside orchestrator loops or agent steps. Use `asyncio.sleep()` and non-blocking executors.
-
-### Rule 5: Production-Ready Code Standard
-- Zero placeholders: Code must be complete, tested, and executable immediately.
-- Never write `pass`, `# TODO: implement later`, or mock returns in core business logic, agent tools, or database migrations.
-- Handle all error boundaries explicitly: log structured exceptions, write failure states to the `agent_tasks` blackboard, and return graceful typed fallback responses.
+### E. Memory & History (memory.py)
+- **Database:** SQLite (gent_memory.db) with WAL mode.
+- **Tool Turns Persistence:** Compact summaries (<= 300 chars) of tool outputs are saved with assistant messages.
+- **Rolling Summarization:** Automatically rolls older turns into conversation_summary when messages exceed threshold, maintaining the last 12 raw turns.
+- **Large File Protection:** Replaces uploaded code/PDF dumps with compact metadata placeholders.
 
 ---
 
-## 3. Directory Layout & Package Roles
-
-```
-adham-agent/ (and workspace root)
-├── core/                         # Core execution engine
-│   ├── __init__.py
-│   ├── brain.py                  # Master Brain orchestrator & agent loop
-│   ├── llm_router.py             # Dual-LLM wrapper (Gemini Flash + DeepSeek)
-│   └── database.py               # Async SQLite blackboard connection & models
-│
-├── agents/                       # Autonomous specialized sub-agents
-│   ├── __init__.py
-│   ├── youtube_agent.py          # Watcher, scriptwriter, SEO, auto-uploader
-│   ├── career_agent.py           # Job hunter, ReliefWeb/Mostaql scraper, ATS CV builder
-│   ├── dev_agent.py              # Autonomous coding, code audit, git operations
-│   └── sys_agent.py              # VPS health, MikroTik manager, server diagnostics
-│
-├── tools/                        # Executable agent tools & integrations
-│   ├── __init__.py
-│   ├── youtube_uploader.py       # YouTube Data API v3 OAuth uploader
-│   ├── playwright_scraper.py     # Resilient headless browser scraper
-│   ├── cv_docx_builder.py        # Tailored ATS Word/PDF CV & Cover Letter builder
-│   └── file_ops.py               # Safe local file system manager
-│
-├── config/                       # Configuration & settings management
-│   ├── __init__.py
-│   └── settings.py               # Pydantic BaseSettings environment loader
-│
-├── workspace_data/               # Persistent runtime artifacts & blackboard
-│   ├── youtube_ready/            # Watched folder for rendered videos ready to publish
-│   ├── generated_cvs/            # Output folder for generated ATS CVs & Cover Letters
-│   ├── logs/                     # Rotating execution logs
-│   └── agent_blackboard.db       # Unified SQLite blackboard database
-│
-├── .env.example                  # Environment template
-├── requirements.txt              # Pinned modern dependencies
-└── ARCHITECTURE.md               # Master blueprint (this document)
-```
-
----
-
-## 4. Environment & Secrets Management
-- All sensitive credentials (`GEMINI_API_KEY`, `DEEPSEEK_API_KEY`, `TELEGRAM_BOT_TOKEN`, `YOUTUBE_CLIENT_SECRETS_FILE`) are loaded exclusively from `.env` via `config.settings.settings`.
-- **Absolute Rule**: Never print, log, or commit `.env` contents to git or display secret keys in terminal outputs.
-
----
-
-## 5. Verification Protocol
-Before marking any feature, agent, or tool complete:
-1. Run syntax and import checks across all modified packages.
-2. Verify that `workspace_data/` directories exist and are writeable.
-3. Verify dual-LLM connectivity and error boundary responses.
-4. Ensure zero linting errors and 100% adherence to the 5 Core Engineering Rules.
+## 3. Data Flow Diagram
+`
+Telegram User Input
+        │
+        ▼
+   main.py (Single-Instance Guard: bot.lock, Concurrent Updates, Chat Lock)
+        │
+        ▼
+   brain.py (Intent Tool Selection <= 25 tools, System Prompt <= 1500 tokens)
+        │
+        ├──► llm.py (SmartRouter -> Gemini / Fallback with Error Classification)
+        │        ▲
+        │        │ Function Calls
+        ▼        ▼
+   tools/__init__.py (JSON Schema Validation, 60s Timeout, Approval Gate)
+        │
+        ▼
+   memory.py (SQLite: Tool Summary Persistence, Rolling History Anchor)
+        │
+        ▼
+   Telegram Response Delivery (Split at 4096 chars, Sanitized Errors)
+`

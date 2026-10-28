@@ -91,12 +91,12 @@ def _match_intent_groups(query: str) -> set[str]:
     
     selected = {"core"}  # Core group is always on
 
-    if (latin_tokens & {"remind", "reminder", "job", "jobs", "career"}) or \
-       any(k in t for k in ["تذكير", "ذكرني", "تنبيه", "وظائف", "وظيفة", "شغل", "فرص"]):
+    if (latin_tokens & {"remind", "reminder", "job", "jobs", "career", "cv", "resume"}) or \
+       any(k in t for k in ["تذكير", "ذكرني", "تنبيه", "وظائف", "وظيفة", "شغل", "فرص", "سيرة"]):
         selected.add("reminders_jobs")
 
-    if (latin_tokens & {"tiktok", "instagram", "reel", "reels", "youtube", "post", "publish", "social", "caption"}) or \
-       any(k in t for k in ["تيك", "انستا", "انستقرام", "انستغرام", "ريلز", "ريل", "يوتيوب", "نشر", "انشر", "مشاهدات", "كابشن"]):
+    if (latin_tokens & {"tiktok", "instagram", "reel", "reels", "youtube", "post", "publish", "social", "caption", "facebook"}) or \
+       any(k in t for k in ["تيك", "انستا", "انستقرام", "انستغرام", "ريلز", "ريل", "يوتيوب", "نشر", "انشر", "مشاهدات", "كابشن", "فيسبوك", "بوست"]):
         selected.add("social_publishing")
 
     if (latin_tokens & {"network", "mikrotik", "router", "subnet", "vlan", "ip", "solar"}) or \
@@ -115,8 +115,8 @@ def _match_intent_groups(query: str) -> set[str]:
        any(k in t for k in ["عملاء", "عميل", "مبيعات", "زبائن", "ايميل", "واتساب", "غزة", "خانيونس", "عرض", "صفقة"]):
         selected.add("leads_sales")
 
-    if (latin_tokens & {"store", "product", "order", "orders", "price", "finance", "money", "receipt"}) or \
-       any(k in t for k in ["متجر", "منتج", "طلب", "ارباح", "أرباح", "فلوس", "فاتورة", "مالية"]):
+    if (latin_tokens & {"store", "product", "order", "orders", "price", "finance", "money", "receipt", "balance", "profit", "expenses"}) or \
+       any(k in t for k in ["متجر", "منتج", "طلب", "ارباح", "أرباح", "فلوس", "فاتورة", "مالية", "رصيد", "حساب", "مصاريف"]):
         selected.add("finance")
 
     return selected
@@ -248,3 +248,7 @@ def validate_tools_schemas() -> dict[str, Any]:
         else:
             report["valid"] += 1
     return report
+
+
+# Backward-compatible alias
+execute_tool = run

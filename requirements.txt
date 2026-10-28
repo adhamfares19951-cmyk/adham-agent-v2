@@ -1,55 +1,48 @@
+﻿# ==============================================================================
+# adham-agent: Autonomous Multi-Agent System & Telegram AI Agent
+# Python 3.11+ (Pinned working versions)
 # ==============================================================================
-# adham-agent: Autonomous Multi-Agent System & Digital Twin Dependencies
-# Python 3.11+
-# ==============================================================================
 
-# Primary LLM SDK (Modern Google Gemini SDK - STRICTLY forbid legacy google-generativeai)
-google-genai>=1.0.0
+# Core Telegram & Networking
+python-telegram-bot[job-queue]==22.8
+httpx==0.28.1
+psutil==7.2.2
+python-dotenv==1.2.4
+tzdata==2026.5
+jsonschema==4.26.0
 
-# Specialized LLM SDK (DeepSeek API via OpenAI SDK compatibility)
-openai>=1.50.0
+# LLM Engines
+google-genai==2.33.0
+openai==3.37.0
+anthropic==2.3.0
 
-# Data Validation & Centralized Configuration
-pydantic>=2.7.0
-pydantic-settings>=2.2.0
-python-dotenv>=1.0.1
+# Async Storage & Scheduling
+aiosqlite==0.22.1
+APScheduler==3.11.3
 
-# High-Performance Async SQLite Database
-aiosqlite>=0.20.0
+# Web Scraping & Automation
+playwright==1.64.1
+beautifulsoup4==4.15.0
+ddgs==9.16.1
 
-# Web Scraping & Headless Browser Automation
-playwright>=1.45.0
-beautifulsoup4>=4.12.3
+# Google & YouTube Data API
+google-api-python-client==2.201.0
+google-auth-oauthlib==1.5.0
+google-auth-httplib2==0.4.4
+youtube-transcript-api==1.2.4
+yt-dlp==2026.10.21
 
-# Google & YouTube Data API v3 Integrations
-google-api-python-client>=2.130.0
-google-auth-oauthlib>=1.2.0
-google-auth-httplib2>=0.2.0
+# Audio & Media Engines
+edge-tts==7.3.1
+imageio-ffmpeg==0.6.0
+numpy==2.4.6
+Pillow==13.0.0
+python-docx==1.2.0
 
-# Automated ATS CV & Document Generation
-python-docx>=1.1.0
-
-# Autonomous Cron & Multi-Agent Task Scheduling
-apscheduler>=3.10.4
-
-# Terminal UI, Diagnostics & Structured Output Formatting
-rich>=13.7.1
-
-# Telegram & Gateway Integrations
-python-telegram-bot[job-queue]>=22.0
-httpx>=0.28.0
-tzdata
-ddgs
-numpy
-flask
-imageio-ffmpeg
-youtube-transcript-api
-yt-dlp
-anthropic
-
-# Enterprise Web Platform & Media Engine
-fastapi>=0.115.0
-uvicorn[standard]>=0.30.0
-jinja2>=3.1.4
-python-multipart>=0.0.9
-edge-tts>=7.0.0
+# Web Platform & APIs
+fastapi==0.162.0
+uvicorn[standard]==0.54.0
+jinja2==3.1.6
+python-multipart==0.0.32
+pydantic==2.14.1
+pydantic-settings==2.16.1
