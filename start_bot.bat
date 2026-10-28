@@ -1,8 +1,19 @@
-@echo off
+﻿@echo off
 chcp 65001 >nul
 title Right Hand Bot (Adham Agent)
 color 0B
 cd /d "%~dp0"
+
+echo ========================================================
+echo [ملاحظة] المشغل الأساسي والمعتمد للبوت هو: start_watchdog.bat
+echo ========================================================
+
+if exist "%~dp0bot.lock" (
+    echo [تحذير] تم اكتشاف ملف bot.lock!
+    echo قد يكون البوت يعمل بالفعل في نافذة أخرى أو عبر start_watchdog.bat.
+    echo لتفادي أخطاء تضارب الرسائل (Conflict)، يرجى استخدام start_watchdog.bat أو إغلاق الجلسة الأخرى.
+    echo.
+)
 
 if exist "%~dp0python_runtime\python.exe" (
     set "PYTHON_EXE=%~dp0python_runtime\python.exe"
@@ -20,14 +31,7 @@ if not errorlevel 1 (
     goto :RUN
 )
 
-if exist "%~dp0python-3.13.16-amd64.exe" (
-    echo [!] No Python detected. Installing bundled Python 3.13 silently...
-    start /wait "" "%~dp0python-3.13.16-amd64.exe" /quiet InstallAllUsers=0 PrependPath=1 Include_test=0
-    set "PYTHON_EXE=python"
-    goto :RUN
-)
-
-echo [ERROR] No Python runtime or installer found!
+echo [ERROR] No Python runtime found!
 pause
 exit /b 1
 

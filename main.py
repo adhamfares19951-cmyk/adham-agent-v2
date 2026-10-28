@@ -5,6 +5,9 @@ import io
 import json
 import logging
 import os
+import sys
+import atexit
+import psutil
 import re
 import time
 import traceback
@@ -39,7 +42,31 @@ logging.basicConfig(
     ],
 )
 logging.getLogger("httpx").setLevel(logging.WARNING)
+
+class SensitiveDataFilter(logging.Filter):
+    """Redacts secrets, bearer tokens, Telegram bot tokens, and cookies from log output."""
+    REDACT_PATTERNS = [
+        re.compile(r'\b[0-9]{8,10}:[a-zA-Z0-9_-]{35}\b'),
+        re.compile(r'\b(?:AIzaSy[a-zA-Z0-9_-]{33}|sk-[a-zA-Z0-9_-]{20,}|ghp_[a-zA-Z0-9]{30,})\b'),
+        re.compile(r'(?i)(?:key|token|password|secret|bearer|authorization|cookie)\s*[:=]\s*["\']?[a-zA-Z0-9_\-\.]{16,}["\']?'),
+    ]
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if isinstance(record.msg, str):
+            for pat in self.REDACT_PATTERNS:
+                record.msg = pat.sub('[REDACTED_SECRET]', record.msg)
+        if record.args:
+            clean_args = []
+            for arg in record.args:
+                if isinstance(arg, str):
+                    for pat in self.REDACT_PATTERNS:
+                        arg = pat.sub('[REDACTED_SECRET]', arg)
+                clean_args.append(arg)
+            record.args = tuple(clean_args)
+        return True
+
 log = logging.getLogger("adham-agent")
+logging.getLogger().addFilter(SensitiveDataFilter())
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -113,21 +140,20 @@ async def _answer(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str,
     await send_long(update, answer)
 
     # ZERO-HALLUCINATION ATTACHMENT DISPATCHER:
-    # If the user or answer mentions CV, PDF, MSF, or file delivery, ALWAYS send the actual file directly
-    t_lower = text.lower()
-    ans_lower = answer.lower()
-    
-    cv_keywords = ["سيرة", "cv", "سي في", "pdf", "بي دي اف", "msf", "اطباء بلا حدود", "ملف", "التقديم", "ارسله", "ابعته", "مش موجود", "وين الملف"]
-    is_cv_context = any(k in t_lower for k in cv_keywords) or any(k in ans_lower for k in ["سيرة", "cv", ".pdf", "msf"])
+    # Attach CV ONLY when user explicitly asks for CV/سيرة
+    latin_words_ans = set(re.findall(r'[a-z0-9_]+', text.lower()))
+    is_explicit_cv = bool(latin_words_ans & {"cv", "msf"}) or any(k in text.lower() for k in ["سيرة ذاتية", "سيرتي", "ملف السيرة", "ابعث السيرة", "ارسل السيرة", "سيرة msf", "اطباء بلا حدود"])
 
-    if is_cv_context:
-        msf_cv = Path(r"C:\Projects\adham-agent\dist_pages\MSF_Data_Entry_Adham_Alhabbash_CV.pdf")
+    if is_explicit_cv:
+        msf_cv = config.BASE_DIR / "dist_pages" / "MSF_Data_Entry_Adham_Alhabbash_CV.pdf"
         if not msf_cv.exists():
             try:
-                import subprocess, sys
-                subprocess.run([sys.executable, r"C:\Projects\adham-agent\scripts\generate_msf_cv.py"], check=True)
-            except Exception:
-                pass
+                import subprocess, sys, asyncio
+                gen_script = config.BASE_DIR / "scripts" / "generate_msf_cv.py"
+                if gen_script.exists():
+                    await asyncio.to_thread(subprocess.run, [sys.executable, str(gen_script)], check=True)
+            except Exception as e:
+                log.warning("Could not pre-generate MSF CV: %s", e)
         if msf_cv.exists():
             try:
                 with open(msf_cv, "rb") as df:
@@ -162,20 +188,21 @@ async def _answer(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str,
             log.exception("Voice reply failed", exc_info=True)
 
 async def _handle_social_and_seo_direct(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str) -> bool:
-    """Zero-Hallucination deterministic executor for publishing, social media, SEO, video research, and stats."""
+    """Deterministic executor for publishing confirmation, explicit stats, SEO, and explicit CV delivery."""
     t = text.lower()
     msg = update.effective_message
     if not msg:
         return False
 
-    is_trading = any(k in t for k in ["تداول", "فوركس", "شارت", "كريبتو", "عملات", "ذهب", "trading", "chart", "forex", "btc", "eurusd"])
-    is_ig = any(k in t for k in ["انستقرام", "انستغرام", "انستا", "instagram", "ig", "ريلز", "ريل", "reel"])
-    is_tiktok = any(k in t for k in ["تيك توك", "تيكتوك", "tiktok"])
-    is_all = any(k in t for k in ["الكل", "كل المنصات", "كل مكان", "الحسابات", "broadcast", "all"])
-    is_seo = any(k in t for k in ["سيو", "seo", "محركات البحث", "محرك البحث", "سيت ماب", "sitemap", "فهرسة"])
-    is_cookie_q = "كوكيز" in t and any(k in t for k in ["تيك", "سناب", "انيغرافيتي", "antigravity", "بعتت", "حفظ"])
+    latin_words = set(re.findall(r'\b[a-z0-9_]+\b', t))
+    arabic_tokens = set(re.findall(r'[\u0600-\u06FF]+', t))
 
-    # 1. Negative Intent and Search Intent Protection (STOPS ACCIDENTAL PUBLISHING)
+    is_ig = bool(latin_words & {"ig", "instagram", "reel", "reels"}) or bool(arabic_tokens & {"انستقرام", "انستغرام", "انستا", "ريلز", "ريل"})
+    is_tiktok = bool(latin_words & {"tiktok"}) or bool(arabic_tokens & {"تيكتوك"}) or ("تيك" in arabic_tokens and "توك" in arabic_tokens)
+    is_all = bool(latin_words & {"all", "broadcast"}) or bool(arabic_tokens & {"الكل"}) or ("كل" in arabic_tokens and ("المنصات" in arabic_tokens or "مكان" in arabic_tokens))
+    is_seo = bool(latin_words & {"seo", "sitemap"}) or bool(arabic_tokens & {"سيو", "فهرسة"}) or any(p in t for p in ["محركات البحث", "محرك البحث", "سيت ماب"])
+
+    # Negative Intent and Search Intent Protection
     is_negation = any(neg in t for neg in [
         "مش ارفع", "مش انشر", "لا ترفع", "لا تنشر", "ما ترفع", "ما تنشر",
         "مش للنشر", "مش رفع", "بدون نشر", "بدون رفع", "مش راضي", "مش فيديو"
@@ -186,86 +213,13 @@ async def _handle_social_and_seo_direct(update: Update, context: ContextTypes.DE
     ])
 
     # Explicit publishing command only
-    is_publish_word = any(k in t for k in ["انشر", "ارفع على", "نزل على", "post", "publish"]) and not is_negation and not is_search_intent
-    is_publish = is_publish_word and (is_tiktok or is_ig or is_all or "تيك" in t or "انستا" in t or "ريل" in t or "ستوديو" in t)
+    is_publish_word = (bool(latin_words & {"post", "publish"}) or bool(arabic_tokens & {"انشر", "ارفع", "نزل"})) and not is_negation and not is_search_intent
+    is_publish = is_publish_word and (is_tiktok or is_ig or is_all)
 
-    # 2. Cookie Inquiry Interceptor
-    if is_cookie_q:
-        msg_text = (
-            "✅ **كوكيز تيك توك وسناب شات محفوظة ومفعلة 100%!**\n\n"
-            "• **تيك توك:** الجلسة نشطة في المتصفح الآلي لحساب `Smart Store` (@coretradeai).\n"
-            "• **سناب شات:** الكوكيز محفوظة في `sessions/snapchat_cookies.json` وجاهزة.\n"
-            "• **المتجر:** مربوط بـ Cloudflare Pages `https://smartglamp.pages.dev`."
-        )
-        await msg.reply_text(msg_text)
-        return True
-
-    # 3. Video Research & Competitor Insights Interceptor (Fixes user research request)
-    if is_search_intent and any(k in t for k in ["فيديو", "فيديوهات", "محتوى", "ريلز", "سبوت", "شورتس", "اعلانات", "إعلانات"]):
-        report = (
-            "🎯 **تحليل الفيديوهات الناجحة لمصباح G-Lamp في السوق الخليجي (تيك توك وسناب شات):**\n\n"
-            "درسنا الفيديوهات الأكثر مبيعاً لنفس المنتج في السعودية والإمارات، وهذه هي أفضل 3 زوايا تحقق ملايين المشاهدات وأعلى مبيعات:\n\n"
-            "1️⃣ **زاوية حل المشكلة (Problem-Solution):**\n"
-            "• **الهوك (0-2 ثانية):** تصوير فوضى الأسلاك على طاولة السرير مع نص: *'تبي تفتك من حوسة الشواحن؟'*.\n"
-            "• **الحل (3-8 ثوانٍ):** استبدال كل الأسلاك بجهاز واحد: شاحن وايرلس 15W سريع، سبيكر بلوتوث نقي، وإضاءة تفاعلية هادية.\n"
-            "• **العرض القوي:** 149 ريال بس، توصيل مجاني والدفع عند الاستلام.\n\n"
-            "2️⃣ **زاوية الفخامة والديكور (Aesthetic Setup / ASMR):**\n"
-            "• فيديو ريل هادئ مع موسيقى ترند خفيفة يوضح إضاءة الغرفة المتغيرة مع الموسيقى وشكل المصباح الفخم.\n"
-            "• هذا النوع في سناب سبوت لايت يحقق أعلى نسبة إكمال (Watch Time) لأن الناس بتحب تعيده!\n\n"
-            "3️⃣ **زاوية الهدية المثالية (Gift Angle):**\n"
-            "• *'أفضل هدية ممكن تهديها لشخص يحب الترتيب والتكنولوجيا'*.\n\n"
-            "💡 **ملاحظة:** الفيديو الذي جهزته لك اليوم مصمم بدقة على زاوية (حل المشكلة) بصوت سعودي احترافي."
-        )
-        await msg.reply_text(report)
-        return True
-
-    # 4. Website Visits & Traffic Interceptor
-    is_site_query = any(k in t for k in ["موقع", "الموقع", "متجر", "المتجر", "زيارات", "زيارة", "ترافيك", "traffic"]) and any(k in t for k in ["صار", "في", "كم", "اجا", "اجى", "شوف", "فحص", "إحصائيات", "احصائيات", "شغال"])
-    if is_site_query:
-        import sqlite3
-        visits_count = 0
-        recent_countries = []
-        try:
-            conn = sqlite3.connect("C:/Projects/adham-agent/agent_memory.db")
-            c = conn.cursor()
-            c.execute("SELECT COUNT(*) FROM site_visits")
-            visits_count = c.fetchone()[0]
-            c.execute("SELECT country, COUNT(*) FROM site_visits GROUP BY country ORDER BY COUNT(*) DESC LIMIT 4")
-            recent_countries = c.fetchall()
-            conn.close()
-        except Exception:
-            pass
-
-        country_summary = "، ".join([f"{c[0]}: {c[1]}" for c in recent_countries if c[0]])
-        report = (
-            "📊 **إحصائيات زيارات متجر G-Lamp حتى الآن:**\n\n"
-            f"🌐 **إجمالي الزيارات المسجلة:** **{visits_count} زيارة فعلية**\n"
-            f"🌍 **توزيع الدول:** {country_summary if country_summary else 'زيارات فحص وعناكب أرشفة'}\n"
-            "🔗 **رابط المتجر الحي:** `https://smartglamp.pages.dev`\n\n"
-            "💡 الزيارات الحالية تتضمن عناكب Google Search Console ومراجعة الروابط، وسترتفع الزيارات الخليجية فور بدء تفاعل المشاهدين مع فيديوهات سناب شات وتيك توك."
-        )
-        await msg.reply_text(report)
-        return True
-
-    # 5. Snapchat Views Inquiry Interceptor
-    is_snap_query = "سناب" in t and any(k in t for k in ["مشاهدة", "مشاهدات", "صفر", "ليش", "واحد", "واحدة", "قليل", "ضعيف"])
-    if is_snap_query:
-        report = (
-            "👻 **ليش سناب شات سبوت لايت بظهر مشاهدة واحدة فقط بالبداية؟**\n\n"
-            "1️⃣ **طابور الفحص والمراجعة (Review Queue):**\n"
-            "ملفك العام على سناب شات جديد وموثق اليوم. في سناب شات Spotlight، كل فيديو يُرفع يدخل مرحلة تدقيق خوارزمي (Review) تستغرق عادة من **ساعتين إلى 24 ساعة** قبل أن يطرحه للجمهور العام في السعودية والخليج.\n\n"
-            "2️⃣ **عينة الاختبار الأولى (Test Batch):**\n"
-            "الخوارزمية تعرض الفيديو أولاً على 5-10 حسابات فقط لاختبار نسبة المشاهدة الكاملة (Retention). إذا كملوا الفيديو، تبدأ الأرقام تقفز بالمئات والآلاف.\n\n"
-            "3️⃣ **الخطوة التالية:**\n"
-            "حمّل الفيديو الاحترافي المخصص لسناب شات الذي أرسلته لك في المحادثة (`glamp_snapchat_spotlight_v1.mp4`)، وانشره كفيديو سبوت لايت مع رابط المتجر."
-        )
-        await msg.reply_text(report)
-        return True
-
-    # 6. TikTok Stats Interceptor (Only when user explicitly asks about TikTok stats)
-    is_stats = any(k in t for k in ["مشاهدة", "مشاهدات", "إحصائيات", "احصائيات", "كم مشاهدة", "كم وصل"]) and (is_tiktok or "تيك" in t) and not is_negation and not is_search_intent
-    if is_stats:
-        await msg.reply_text("🔍 **أمرك يا أدهم!** جاري فتح استوديو تيك توك عبر المتصفح الآلي لفحص عدد المشاهدات الحقيقية...")
+    # 1. TikTok Stats Interceptor (Only on explicit stats question)
+    is_explicit_stats = (bool(arabic_tokens & {"إحصائيات", "احصائيات", "مشاهدات"}) or any(p in t for p in ["كم مشاهدة", "كم وصل", "كم المشاهدات"])) and is_tiktok and not is_negation and not is_search_intent
+    if is_explicit_stats:
+        await msg.reply_text("🔍 **أمرك يا أدهم!** جاري فحص عدد المشاهدات الحقيقية عبر TikTok Studio...")
         from tools import tiktok_publisher
         res = await tiktok_publisher.get_tiktok_stats()
         if res.get("success"):
@@ -292,68 +246,49 @@ async def _handle_social_and_seo_direct(update: Update, context: ContextTypes.DE
             await msg.reply_text(f"❌ تعذر فحص إحصائيات تيك توك: {res.get('error')}")
             return True
 
-    # 7. Multi-platform broadcast (ONLY when explicitly commanded to publish)
-    if is_publish and (is_all or (is_ig and is_tiktok)):
-        await msg.reply_text("🌐 **أمرك يا أدهم!** بدأت فوراً بالنشر المتزامن على تيك توك وإنستغرام ريلز عبر المتصفح الآلي...")
-        from tools import social_dispatcher
-        res = await social_dispatcher.broadcast_social()
-        report = "🎉 **اكتملت مهمة النشر بنجاح:**\n"
-        if res.get("instagram", {}).get("success"):
-            report += "✅ **إنستغرام (@smartstore.gcc):** تم نشر الريلز مباشرة!\n"
-        if res.get("tiktok", {}).get("success"):
-            report += "✅ **تيك توك (@coretradeai):** تم الرفع والنشر في تيك توك ستوديو!\n"
-        await msg.reply_text(report)
+    # 2. Publishing Gated Confirmation (Rule 14: Never publish directly from keyword!)
+    if is_publish:
+        target_platform = "all" if is_all or (is_ig and is_tiktok) else ("ig" if is_ig else "tiktok")
+        platform_label = "تيك توك وإنستغرام ريلز (معاً)" if target_platform == "all" else ("إنستغرام ريلز" if target_platform == "ig" else "تيك توك")
+        
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("✅ تأكيد النشر", callback_data=f"social:pub_confirm:{target_platform}"),
+                InlineKeyboardButton("❌ إلغاء", callback_data="social:pub_cancel")
+            ]
+        ])
+        await msg.reply_text(
+            f"⚠️ **تأكيد عملية النشر الخارجي:**\n\n"
+            f"هل تود نشر المحتوى المجهز الآن على **{platform_label}**؟\n"
+            f"لن يتم النشر إلا بعد الضغط على زر التأكيد أدناه.",
+            reply_markup=keyboard
+        )
         return True
 
-    # 8. Instagram Reel (ONLY when explicitly commanded)
-    if is_publish and is_ig and not is_tiktok:
-        await msg.reply_text("📸 **أمرك يا أدهم!** جاري رفع ونشر الريلز على حساب إنستغرام الرسمي (@smartstore.gcc)...")
-        from tools import social_dispatcher
-        res = await social_dispatcher.execute_instagram_reel()
-        if res.get("success"):
-            await msg.reply_text("✅ " + res.get("message", "تم نشر الريلز بنجاح!"))
-        else:
-            await msg.reply_text(f"❌ تعذر نشر الريلز على إنستغرام: {res.get('error')}")
-        return True
-
-    # 9. TikTok Upload (ONLY when explicitly commanded)
-    if is_publish and is_tiktok and not is_ig:
-        await msg.reply_text("⚡ **أمرك يا أدهم!** جاري رفع الفيديو ونشره تلقائياً على حسابك في تيك توك عبر المتصفح الآلي...")
-        from tools import social_dispatcher
-        res = await social_dispatcher.execute_tiktok_video()
-        if res.get("success"):
-            await msg.reply_text("✅ تم رفع الفيديو إلى تيك توك ستوديو بنجاح!")
-        else:
-            await msg.reply_text(f"❌ تعذر رفع الفيديو إلى تيك توك: {res.get('detail')}")
-        return True
-
-    # 10. SEO & Search Engine Discovery
+    # 3. SEO & Search Engine Discovery
     if is_seo:
         from tools import social_dispatcher
         report = await social_dispatcher._handle_seo_audit({})
         await msg.reply_text(report)
         return True
 
-    # 11. Zero-Hallucination CV & PDF Dispatcher (ONLY when actually asking for CV/document)
-    doc_triggers = [
-        "pdf", "سيرة", "cv", "سي في", "السي في", "السيرة", "ملف السيرة",
-        "بي دي اف", "اطباء بلا حدود", "msf", "وين الملف", "وين السيرة", "ابعث السيرة"
-    ]
-    is_doc_request = any(k in t for k in doc_triggers) and not any(k in t for k in ["فيديو", "موقع", "سناب", "تيك"])
-    
-    if is_doc_request:
-        msf_cv = Path(r"C:\Projects\adham-agent\dist_pages\MSF_Data_Entry_Adham_Alhabbash_CV.pdf")
+    # 4. Explicit CV / Document Request (Only when explicitly asked for CV)
+    is_explicit_cv = bool(latin_words & {"cv", "msf"}) or bool(arabic_tokens & {"سيرتي", "السيرة"}) or any(p in t for p in ["سيرة ذاتية", "ملف السيرة", "ابعث السيرة", "ارسل السيرة", "سيرة msf", "اطباء بلا حدود"])
+    if is_explicit_cv and not any(k in t for k in ["فيديو", "موقع", "سناب", "تيك", "انستا"]):
+        msf_cv = config.BASE_DIR / "dist_pages" / "MSF_Data_Entry_Adham_Alhabbash_CV.pdf"
         if not msf_cv.exists():
             try:
-                import subprocess, sys
-                subprocess.run([sys.executable, r"C:\Projects\adham-agent\scripts\generate_msf_cv.py"], check=True)
-            except Exception:
-                pass
+                import subprocess, sys, asyncio
+                gen_script = config.BASE_DIR / "scripts" / "generate_msf_cv.py"
+                if gen_script.exists():
+                    await asyncio.to_thread(subprocess.run, [sys.executable, str(gen_script)], check=True)
+            except Exception as e:
+                log.warning("Could not pre-generate CV: %s", e)
 
         if msf_cv.exists():
             caption = (
                 "✅ **تفضل يا أدهم، ملف السيرة الذاتية الحقيقي جاهز ومرفق كمستند مباشر!**\n\n"
-                "• **الملف:** `MSF_Data_Entry_Adham_Alhabbash_CV.pdf`\n"
+                "• **الملف:** MSF_Data_Entry_Adham_Alhabbash_CV.pdf\n"
                 "• **الوظيفة:** Data Entry Operator - منظمة أطباء بلا حدود (MSF France)\n"
                 "• **رابط سحابي دائم:** https://smartglamp.pages.dev/cv.pdf"
             )
@@ -376,7 +311,12 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     if not text:
         return
 
-    log.info("📥 Received Telegram text from %s: %s", update.effective_user.id if update.effective_user else "unknown", text)
+    uid = update.effective_user.id if update.effective_user else "unknown"
+    if ("{" in text and "}" in text) and any(k in text.lower() for k in ["cookie", "session", "token", "auth"]):
+        log.info("📥 Received Telegram text from %s (len=%d, sensitive json content redacted)", uid, len(text))
+    else:
+        preview = (text[:40] + "...") if len(text) > 40 else text
+        log.info("📥 Received Telegram text from %s (len=%d): %s", uid, len(text), preview)
     try:
         import memory
         memory.add_chat_message("user", text)
@@ -1073,6 +1013,42 @@ async def handle_social_callback(update: Update, context: ContextTypes.DEFAULT_T
 
     if data == "noop":
         return
+
+    # Pattern: social:pub_confirm:<platform>
+    if data.startswith("social:pub_confirm:"):
+        platform = data.split(":")[-1]
+        await query.edit_message_text(f"⏳ جاري تنفيذ النشر على {platform} عبر المتصفح الآلي...")
+        from tools import social_dispatcher
+        try:
+            if platform == "all":
+                res = await social_dispatcher.broadcast_social()
+                report = "🎉 **اكتملت مهمة النشر:**\n"
+                if res.get("instagram", {}).get("success"):
+                    report += "✅ **إنستغرام (@smartstore.gcc):** تم نشر الريلز مباشرة!\n"
+                if res.get("tiktok", {}).get("success"):
+                    report += "✅ **تيك توك (@coretradeai):** تم الرفع والنشر في تيك توك ستوديو!\n"
+                await query.message.reply_text(report)
+            elif platform == "ig":
+                res = await social_dispatcher.execute_instagram_reel()
+                if res.get("success"):
+                    await query.message.reply_text("✅ " + res.get("message", "تم نشر الريلز بنجاح!"))
+                else:
+                    await query.message.reply_text(f"❌ تعذر نشر الريلز على إنستغرام: {res.get('error')}")
+            elif platform == "tiktok":
+                res = await social_dispatcher.execute_tiktok_video()
+                if res.get("success"):
+                    await query.message.reply_text("✅ تم رفع الفيديو إلى تيك توك ستوديو بنجاح!")
+                else:
+                    await query.message.reply_text(f"❌ تعذر رفع الفيديو إلى تيك توك: {res.get('detail')}")
+        except Exception as e:
+            await query.message.reply_text(f"❌ حدث خطأ أثناء النشر: {e}")
+        return
+
+    # Pattern: social:pub_cancel
+    if data == "social:pub_cancel":
+        await query.edit_message_text("❌ تم إلغاء عملية النشر بناءً على طلبك.")
+        return
+
 
     # Pattern: social:approve:<queue_id>
     if data.startswith("social:approve:"):
@@ -2208,111 +2184,6 @@ async def publish_short_command(update: Update, context: ContextTypes.DEFAULT_TY
         await msg.reply_text(f"❌ حدث خطأ أثناء خط الإنتاج والنشر:\n<code>{e}</code>", parse_mode="HTML")
 
 
-async def publish_long_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """/publish_long [topic] — builds and publishes a complete 16:9 multi-chapter masterclass to YouTube."""
-    msg = update.effective_message
-    from tools import long_video_studio, youtube_publisher
-
-    topic = " ".join(context.args).strip() or "Smart Money Concepts Complete Masterclass"
-    await msg.reply_text(
-        f"🎬 **جاري إنتاج الماستر كلاس الكامل (16:9 Landscape) لقناتك Core Trade AI!**\n"
-        f"📌 الموضوع: {topic}\n"
-        f"⚡ جاري توليد الفصول، الرندرة الجرافيكية، الصوت العصبي لكل فصل، ودمج الفيديو الكامل..."
-    )
-
-    try:
-        chapters = [
-            {
-                "title": "The Hidden Wall Street Architecture",
-                "subtitle": "Why 95% of retail technical indicators are engineered to fail.",
-                "points": [
-                    "Retail liquidity pools act as fuel for market makers",
-                    "High-frequency algorithms execute stop runs before true expansion",
-                    "Why RSI and MACD give false signals in trending markets",
-                    "The shift from retail trading to institutional order tracking",
-                ],
-                "script": "Welcome to Core Trade AI. If you've been trading financial markets, you've likely felt that the market is watching your stop loss. The truth is: it is. In this masterclass, we uncover how hedge funds and central banks actually engineer liquidity.",
-                "theme_color": "#ef4444",
-            },
-            {
-                "title": "Smart Money Concepts: Order Blocks & Imbalances",
-                "subtitle": "Tracking institutional accumulation zones with mathematical precision.",
-                "points": [
-                    "Identifying the true Order Block before displacement",
-                    "Fair Value Gaps (FVG) and algorithmic rebalancing",
-                    "The difference between high-volume accumulation and noise",
-                    "How to mark pristine institutional entry zones",
-                ],
-                "script": "Institutional players cannot enter positions with a single click. Their orders are so massive they create structural footprints known as Order Blocks and Fair Value Gaps. When displacement occurs, algorithms leave imbalances that act like magnets pulling price back.",
-                "theme_color": "#06b6d4",
-            },
-            {
-                "title": "Liquidity Sweeps & Stop Run Mechanics",
-                "subtitle": "How smart money triggers liquidations above equal highs and lows.",
-                "points": [
-                    "Buy-side vs Sell-side liquidity pools",
-                    "The psychology of double tops and false breakout traps",
-                    "Recognizing the turtle soup and false wick reversal",
-                    "Entering on the re-test of the sweep",
-                ],
-                "script": "Every time retail traders see a clean double top, they place stop losses right above it. To an institutional algorithm, that cluster of stops is free liquidity. The market spikes above the highs, fills massive institutional short orders, and immediately reverses.",
-                "theme_color": "#eab308",
-            },
-            {
-                "title": "Algorithmic Risk Management & Quantitative Edge",
-                "subtitle": "The mathematical formula that separates profitable traders from gamblers.",
-                "points": [
-                    "Asymmetric risk to reward: Minimum 1 to 3 ratio",
-                    "Dynamic position sizing based on true market volatility",
-                    "Eliminating emotional bias through systematic rule sets",
-                    "The compounding power of disciplined execution",
-                ],
-                "script": "Even with a 45% win rate, a quantitative trader with a 1 to 3 risk-to-reward ratio will outperform 99% of discretionary traders. Wealth is built through asymmetric payoff and disciplined position sizing, not by predicting every candle.",
-                "theme_color": "#10b981",
-            },
-            {
-                "title": "The Core Trade AI Advantage",
-                "subtitle": "Automating your edge with algorithmic precision.",
-                "points": [
-                    "Real-time liquidity detection algorithms",
-                    "Automated alerts on high-probability institutional setups",
-                    "Continuous backtesting across multi-asset portfolios",
-                    "Join the future of quantitative smart money trading",
-                ],
-                "script": "At Core Trade AI, our mission is simple: level the playing field by providing retail traders with the same algorithmic intelligence used by proprietary trading desks. Subscribe to our channel, join our community, and start trading with the algorithm.",
-                "theme_color": "#38bdf8",
-            },
-        ]
-
-        res = await long_video_studio.assemble_long_form_video(
-            title=f"{topic} (Full Masterclass)",
-            chapters=chapters,
-        )
-
-        yt_msg = ""
-        if youtube_publisher.is_authenticated():
-            yt_res = await youtube_publisher.upload_video(
-                video_path=Path(res["video_path"]),
-                title=f"{res['title']} | Core Trade AI",
-                description=res["description"],
-                privacy_status="public",
-                is_short=False,
-                tags=["trading", "smc", "forex", "gold", "crypto", "smartmoney", "algo"],
-            )
-            yt_msg = f"\n🚀 **تم نشر الفيديو الطويل مباشرة على يوتيوب!**\n🔗 **الرابط:** {yt_res['url']}"
-
-        await msg.reply_text(
-            f"🎉 **تم الانتهاء من إنتاج الماستر كلاس الطويل!**\n\n"
-            f"📺 **العنوان:** {res['title']}\n"
-            f"⚖️ **الحجم:** {res['file_size_mb']} MB (1080p Widescreen)\n"
-            f"📑 **الفصول (Timestamps):**\n" + "\n".join(res["timestamps"]) +
-            yt_msg
-        )
-    except Exception as e:
-        log.error("Error in publish_long_command:\n%s", traceback.format_exc())
-        await msg.reply_text(f"❌ حدث خطأ أثناء إنتاج الفيديو الطويل:\n<code>{e}</code>", parse_mode="HTML")
-
-
 async def tiktok_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """/tiktok [publish [topic] | upload [video_path] | status] — manages TikTok publishing & creation."""
     msg = update.effective_message
@@ -2871,7 +2742,41 @@ async def seo_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     await update.effective_message.reply_text(report)
 
 
+
+def acquire_bot_lock() -> bool:
+    """Single-instance guard using bot.lock and PID check."""
+    lock_file = config.BASE_DIR / "bot.lock"
+    if lock_file.exists():
+        try:
+            content_str = lock_file.read_text(encoding="utf-8").strip()
+            if content_str.isdigit():
+                existing_pid = int(content_str)
+                if existing_pid != os.getpid() and psutil.pid_exists(existing_pid):
+                    print(f"⚠️ البوت يعمل بالفعل في جلسة أخرى (PID: {existing_pid}). تم إيقاف هذه المحاولة لتفادي تعارض الجلسات (Conflict).")
+                    log.warning("Bot already running under PID %s. Exiting cleanly (code 0) to avoid conflict.", existing_pid)
+                    return False
+        except Exception as e:
+            log.warning("Error inspecting existing bot.lock: %s", e)
+
+    try:
+        lock_file.write_text(str(os.getpid()), encoding="utf-8")
+        def release_lock():
+            try:
+                if lock_file.exists():
+                    c = lock_file.read_text(encoding="utf-8").strip()
+                    if c == str(os.getpid()):
+                        lock_file.unlink(missing_ok=True)
+            except Exception:
+                pass
+        atexit.register(release_lock)
+        return True
+    except Exception as e:
+        log.error("Could not write bot.lock: %s", e)
+        return True
+
 def main() -> None:
+    if not acquire_bot_lock():
+        sys.exit(0)
     init_db()
 
     app = Application.builder().token(config.TELEGRAM_TOKEN).post_init(post_init).build()
@@ -2981,11 +2886,10 @@ def main() -> None:
 
     log.info("Bot is running (provider=%s, model=%s). Press Ctrl+C to stop.", config.AI_PROVIDER, config.MODEL)
     try:
-        app.run_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=True)
+        app.run_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=False)
     except Exception as e:
-        log.warning("run_polling encountered fatal error: %s. Exiting for watchdog reboot...", e)
-        import os
-        os._exit(1)
+        log.warning("run_polling encountered fatal error: %s. Exiting cleanly for watchdog reboot...", e)
+        sys.exit(1)
 
 
 if __name__ == "__main__":

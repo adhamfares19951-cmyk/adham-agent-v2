@@ -36,3 +36,11 @@ packed_projects/
 *.zip
 *.bak*
 get-pip.py
+
+# Added for Wave 0 Security & Process Hygiene
+youtube_cookies.txt
+*.cookies*
+facebook_saved_items.*
+agent_memory.db-*
+backups/
+bot.lock
