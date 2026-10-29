@@ -31,7 +31,6 @@ PROJECTS_MAP = {
     "conquerors_bot": WORKSPACE_ROOT / "conquerors_bot",
     "adham-agent": WORKSPACE_ROOT / "adham-agent",
     "agent": WORKSPACE_ROOT / "adham-agent",
-    "root": WORKSPACE_ROOT,
 }
 
 # Dangerous destructive commands to block for system safety
@@ -41,34 +40,64 @@ BLOCKED_PATTERNS = [
     r"\bdel\s+/[fF]\s+/[sS]\s+/[qQ]\s+[cC]:\\windows",
     r"\bshutdown\b",
     r"\bDrop\s+database\b",
+    r"\brm\s+-rf\b",
+    r"\bdel\s+/[sS]\b",
+    r"\brmdir\s+/[sS]\b",
+    r"\breg\s+(add|delete)\b",
+    r"\bschtasks\b",
+    r"\bnet\s+user\b",
+    r"\bcertutil\b",
+    r"\bbitsadmin\b",
+    r"invoke-expression|\biex\b",
+    r"powershell(\.exe)?\s+.*-e(nc|ncodedcommand)\b",
+    r"(curl|wget|iwr|invoke-webrequest)\b.*\|\s*(sh|bash|iex|powershell|cmd)",
+    r"\.env\b",
+    r"cookies|sessions[\\/]|token\.json|credentials\.json|client_secret",
 ]
 
+# Files the bot must never read or write through workspace tools
+SENSITIVE_NAME_RE = re.compile(
+    r"(^|[\\/])(\.env(\..*)?|token\.json|credentials\.json|client_secret.*|.*cookies.*|.*\.pem|.*\.key|"
+    r"agent_memory\.db.*|bot\.lock)$|(^|[\\/])sessions[\\/]|(^|[\\/])\.git[\\/]",
+    re.IGNORECASE,
+)
 
-def _resolve_project_dir(project_name: str) -> Path:
-    p_clean = project_name.lower().strip()
-    if p_clean in PROJECTS_MAP:
-        target = PROJECTS_MAP[p_clean]
-        if target.exists():
-            return target
 
-    # Try subfolder of WORKSPACE_ROOT
-    candidate = WORKSPACE_ROOT / project_name.strip()
-    if candidate.exists() and candidate.is_dir():
-        return candidate
+def _is_sensitive(rel_path: str) -> bool:
+    return bool(SENSITIVE_NAME_RE.search(rel_path.replace("\\", "/")))
 
-    return WORKSPACE_ROOT
+
+def _safe_target(pdir: Path, rel: str) -> Path | None:
+    """Return the resolved path only if it stays inside the project dir and is not sensitive."""
+    target = (pdir / rel.lstrip("/\\")).resolve()
+    try:
+        target.relative_to(pdir.resolve())
+    except ValueError:
+        return None
+    if _is_sensitive(str(target.relative_to(pdir.resolve()))):
+        return None
+    return target
+
+
+def _resolve_project_dir(project_name: str) -> Path | None:
+    """Only projects listed in PROJECTS_MAP are reachable. No fallback to the workspace root."""
+    target = PROJECTS_MAP.get(project_name.lower().strip())
+    if target and target.exists() and target.is_dir():
+        return target
+    return None
 
 
 def list_project_files(project_name: str, subpath: str = "", max_files: int = 50) -> list[str]:
     """Lists files in a project relative to its directory."""
     pdir = _resolve_project_dir(project_name)
-    start_dir = pdir / subpath.lstrip("/\\") if subpath else pdir
-
-    if not start_dir.exists():
+    if pdir is None:
+        return [f"المشروع غير معروف أو غير مسموح: {project_name}"]
+    start_dir = _safe_target(pdir, subpath) if subpath else pdir
+    if start_dir is None or not start_dir.exists():
         return [f"المجلد غير موجود: {subpath}"]
 
     results = []
-    ignored = {".git", "vendor", "node_modules", ".dart_tool", "build", "dist", "__pycache__", "storage"}
+    ignored = {".git", "vendor", "node_modules", ".dart_tool", "build", "dist", "__pycache__", "storage", "sessions", "venv", ".venv"}
 
     for root, dirs, files in os.walk(start_dir):
         dirs[:] = [d for d in dirs if d not in ignored]
@@ -76,6 +105,8 @@ def list_project_files(project_name: str, subpath: str = "", max_files: int = 50
 
         for f in files:
             rel_file = str(rel_root / f) if str(rel_root) != "." else f
+            if _is_sensitive(rel_file):
+                continue
             results.append(rel_file)
             if len(results) >= max_files:
                 return results
@@ -86,7 +117,11 @@ def list_project_files(project_name: str, subpath: str = "", max_files: int = 50
 def read_project_file(project_name: str, file_path: str, max_chars: int = 7000) -> dict[str, Any]:
     """Reads a file from a project."""
     pdir = _resolve_project_dir(project_name)
-    target = pdir / file_path.lstrip("/\\")
+    if pdir is None:
+        return {"error": f"المشروع '{project_name}' غير معروف أو غير مسموح."}
+    target = _safe_target(pdir, file_path)
+    if target is None:
+        return {"error": "مسار محظور (خارج المشروع أو ملف حساس مثل .env/الكوكيز/الجلسات)."}
 
     if not target.exists() or not target.is_file():
         return {"error": f"الملف '{file_path}' غير موجود في مشروع '{project_name}'."}
@@ -113,13 +148,11 @@ def read_project_file(project_name: str, file_path: str, max_chars: int = 7000) 
 def write_project_file(project_name: str, file_path: str, content: str, backup: bool = True) -> dict[str, Any]:
     """Safely writes content to a file, making a backup if it already exists."""
     pdir = _resolve_project_dir(project_name)
-    target = pdir / file_path.lstrip("/\\")
-
-    # Safety: don't escape workspace root
-    try:
-        target.resolve().relative_to(WORKSPACE_ROOT)
-    except ValueError:
-        return {"error": "محاولة تعديل مسار خارج بيئة العمل (Security Violation)."}
+    if pdir is None:
+        return {"error": f"المشروع '{project_name}' غير معروف أو غير مسموح."}
+    target = _safe_target(pdir, file_path)
+    if target is None:
+        return {"error": "محاولة تعديل مسار محظور (خارج المشروع أو ملف حساس) (Security Violation)."}
 
     target.parent.mkdir(parents=True, exist_ok=True)
 
@@ -159,6 +192,8 @@ def write_project_file(project_name: str, file_path: str, content: str, backup: 
 async def run_project_command(project_name: str, command: str, timeout: int = 60) -> dict[str, Any]:
     """Runs a development or terminal command in the specified project directory."""
     pdir = _resolve_project_dir(project_name)
+    if pdir is None:
+        return {"success": False, "error": f"المشروع '{project_name}' غير معروف أو غير مسموح."}
 
     # Security check
     for pat in BLOCKED_PATTERNS:
@@ -196,7 +231,6 @@ async def run_project_command(project_name: str, command: str, timeout: int = 60
 # Autonomous lead-preview updater helper
 async def auto_update_lead_preview(action: str = "full") -> dict[str, Any]:
     """Runs autonomous updates, migrations, and test validations on lead-preview-bot."""
-    pdir = PROJECTS_MAP["lead-preview-bot"]
     reports = []
 
     if action in ("full", "pull"):

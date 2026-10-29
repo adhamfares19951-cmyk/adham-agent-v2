@@ -1,6 +1,7 @@
 """SQLite storage: conversation history, saved facts, reminders, daily usage."""
 import json
 import sqlite3
+from pathlib import Path
 from contextlib import contextmanager
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -806,3 +807,25 @@ def get_verified_lead(lead_id: int) -> sqlite3.Row | None:
 
 
 
+
+
+def backup_database() -> Path:
+    """Creates a timestamped backup of agent_memory.db in backups/ and keeps only 7 latest copies."""
+    backups_dir = config.BASE_DIR / "backups"
+    backups_dir.mkdir(parents=True, exist_ok=True)
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    backup_file = backups_dir / f"agent_memory_{ts}.db"
+
+    # SQLite online backup API ensures ACID snapshot without locking active bot operations
+    with _db() as src_conn:
+        with sqlite3.connect(backup_file) as dst_conn:
+            src_conn.backup(dst_conn)
+
+    # Prune older backups keeping only 7
+    all_backups = sorted(backups_dir.glob("agent_memory_*.db"), key=lambda p: p.stat().st_mtime, reverse=True)
+    for old in all_backups[7:]:
+        try:
+            old.unlink()
+        except OSError:
+            pass
+    return backup_file

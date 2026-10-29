@@ -4,6 +4,7 @@ Arabic and English voiceovers for TikTok, YouTube Shorts, and Reels with zero AP
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from pathlib import Path
@@ -27,14 +28,23 @@ VOICES = {
 
 
 async def generate_speech(text: str, voice_key: str = "ar_male_egypt", rate: str = "+0%", pitch: str = "+0Hz") -> Path:
-    """Generates an MP3 audio voiceover from text."""
+    """Generates an MP3 audio voiceover from text with retry on transient network failures."""
     voice_name = VOICES.get(voice_key, VOICES["ar_male_egypt"])
     filename = f"voice_{int(time.time())}.mp3"
     target_path = AUDIO_DIR / filename
 
-    communicate = edge_tts.Communicate(text=text, voice=voice_name, rate=rate, pitch=pitch)
-    await communicate.save(str(target_path))
-    return target_path
+    last_err = None
+    for attempt in range(1, 4):
+        try:
+            communicate = edge_tts.Communicate(text=text, voice=voice_name, rate=rate, pitch=pitch)
+            await communicate.save(str(target_path))
+            return target_path
+        except Exception as e:
+            last_err = e
+            log.warning("edge-tts generate_speech attempt %d/3 failed: %s", attempt, e)
+            if attempt < 3:
+                await asyncio.sleep(1.5)
+    raise last_err
 
 
 async def voice_studio_handler(args: dict) -> str:

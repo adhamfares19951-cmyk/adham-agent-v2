@@ -12,10 +12,14 @@ from typing import Any
 
 log = logging.getLogger("skills_engine")
 
-# Workspace root is 2 levels up from adham-agent (C:/Projects/)
-WORKSPACE_ROOT = Path(__file__).resolve().parent.parent.parent
-SKILLS_DIR = WORKSPACE_ROOT / ".agents" / "skills"
-GLOBAL_SKILLS_DIR = Path.home() / ".gemini" / "config" / "skills"
+# Skills are untrusted text. Only the project-local "skills" folder is indexed by default.
+# Copy the skills you reviewed into adham-agent/skills/<skill-name>/SKILL.md.
+# An extra directory can be added explicitly with SKILLS_EXTRA_DIR in .env (off by default).
+import os
+PROJECT_DIR = Path(__file__).resolve().parent.parent
+SKILLS_DIR = PROJECT_DIR / "skills"
+_extra = os.getenv("SKILLS_EXTRA_DIR", "").strip()
+GLOBAL_SKILLS_DIR = Path(_extra) if _extra else SKILLS_DIR
 
 _SKILLS_CACHE: list[dict[str, Any]] = []
 
@@ -77,7 +81,7 @@ def _load_skills_index() -> list[dict[str, Any]]:
                 })
                 seen.add(skill_name)
             except Exception as e:
-                log.warning("Could not parse skill %s: %e", skill_name, e)
+                log.warning("Could not parse skill %s: %s", skill_name, e)
 
     _SKILLS_CACHE = skills
     log.info("Indexed %d workspace skills", len(_SKILLS_CACHE))
@@ -162,7 +166,7 @@ async def _tool_search_skills(args: dict) -> str:
     limit = int(args.get("limit", 8))
     results = search_skills(query, limit=limit)
     if not results:
-        return f"لم أجد أي مهارات تطابق '{query}'. تتوفر لدينا 480 مهارة في مجالات البرمجة والذكاء الاصطناعي."
+        return f"لم أجد أي مهارات تطابق '{query}'. المهارات المتاحة هي ما نُسخ إلى مجلد skills داخل المشروع."
 
     out = [f"🔍 وجدنا {len(results)} مهارة مطابقة لـ '{query}':"]
     for s in results:

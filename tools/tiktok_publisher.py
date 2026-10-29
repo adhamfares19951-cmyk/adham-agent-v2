@@ -8,6 +8,8 @@ Supports:
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 import logging
 import os
 import time
@@ -299,6 +301,39 @@ async def upload_video(
             await browser_context.close()
 
 
+
+# ---------------------------------------------------------------------------
+# Duplicate-upload guard: the same video file (by content hash) is never uploaded twice,
+# and only one upload runs at a time. Two uploads of one clip minutes apart look like spam.
+# ---------------------------------------------------------------------------
+_UPLOAD_LOCK = asyncio.Lock()
+_UPLOADS_LOG = Path(__file__).resolve().parent.parent / "tiktok_uploads.json"
+
+
+def _file_sha(path: Path) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _load_uploads() -> dict:
+    try:
+        return json.loads(_UPLOADS_LOG.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def _save_upload(sha: str, name: str) -> None:
+    data = _load_uploads()
+    data[sha] = {"file": name, "ts": time.strftime("%Y-%m-%d %H:%M:%S")}
+    try:
+        _UPLOADS_LOG.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+    except Exception:
+        log.exception("Could not save TikTok uploads log")
+
+
 async def _handle_tiktok_upload(args: dict[str, Any]) -> str:
     """Agent tool handler for uploading a video to TikTok."""
     vpath = args.get("video_path")
@@ -313,7 +348,19 @@ async def _handle_tiktok_upload(args: dict[str, Any]) -> str:
                 "⚠️ **حساب تيك توك غير مسجل بعد!**\n"
                 "يرجى تشغيل سكربت الربط لمرة واحدة `setup_tiktok.bat` لتسجيل الدخول وحفظ الجلسة."
             )
-        res = await upload_video(video_path=vpath, caption=caption, tags=tags)
+        vp = Path(vpath)
+        if not vp.exists():
+            return f"❌ ملف الفيديو غير موجود: {vpath}"
+        sha = _file_sha(vp)
+        prev = _load_uploads().get(sha)
+        if prev and not args.get("force"):
+            return (f"⛔ هذا الفيديو نُشر سابقاً على تيك توك ({prev['ts']}، الملف {prev['file']}). "
+                    "لن أرفعه مرة ثانية لأن التكرار يضر الظهور. إذا أدهم يريد ذلك فعلاً، أعد الطلب مع force=true.")
+        if _UPLOAD_LOCK.locked():
+            return "⛔ يوجد رفع آخر قيد التنفيذ الآن. انتظر انتهاءه ثم أعد المحاولة."
+        async with _UPLOAD_LOCK:
+            res = await upload_video(video_path=vpath, caption=caption, tags=tags)
+        _save_upload(sha, vp.name)
         return (
             f"✅ **تم نشر الفيديو بنجاح على تيك توك!**\n"
             f"📝 **الكابشن:** {res['caption']}\n"
@@ -435,7 +482,8 @@ TOOLS = [
             "properties": {
                 "video_path": {"type": "string", "description": "المسار الكامل لملف الفيديو MP4"},
                 "caption": {"type": "string", "description": "نص الكابشن والوصف"},
-                "tags": {"type": "array", "items": {"type": "string"}, "description": "قائمة الهاشتاجات"}
+                "tags": {"type": "array", "items": {"type": "string"}, "description": "قائمة الهاشتاجات"},
+                "force": {"type": "boolean", "description": "ارفع حتى لو نُشر نفس الفيديو سابقاً (استعمله فقط بطلب صريح من أدهم)"}
             },
             "required": ["video_path"]
         },

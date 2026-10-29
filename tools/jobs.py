@@ -498,8 +498,32 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 # ---------------------------------------------------------------- AI tools
 
+_bg_scan: asyncio.Task | None = None
+
+
+async def _background_scan() -> None:
+    """Runs the full scan outside the tool timeout and reports the result to the owner."""
+    try:
+        summary = await asyncio.wait_for(scan(), timeout=15 * 60)
+    except asyncio.TimeoutError:
+        summary = "فحص الوظائف تجاوز 15 دقيقة وتوقف. جرّب لاحقاً."
+    except Exception as e:
+        log.exception("Background job scan failed")
+        summary = f"فشل فحص الوظائف: {getattr(e, 'user_message', e)}"
+    if _app is not None:
+        try:
+            await _app.bot.send_message(config.OWNER_ID, f"🔎 انتهى فحص الوظائف: {summary}")
+        except Exception:
+            log.warning("Could not send job scan summary", exc_info=True)
+
+
 async def scan_jobs_now(args: dict) -> str:
-    return await scan()
+    """Start the scan in the background (a full scan takes minutes, longer than the tool timeout)."""
+    global _bg_scan
+    if _bg_scan is not None and not _bg_scan.done():
+        return "في فحص شغّال أصلاً بالخلفية، رح توصلك النتيجة لما يخلص."
+    _bg_scan = asyncio.create_task(_background_scan())
+    return "بلشت فحص الوظائف بالخلفية 🔎 رح توصلك الفرص المناسبة وملخص النتيجة لما يخلص (ممكن ياخد كم دقيقة)."
 
 
 async def recent_opportunities(args: dict) -> str:

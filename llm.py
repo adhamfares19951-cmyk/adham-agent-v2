@@ -9,6 +9,7 @@ A tool call dict is {"id": str, "name": str, "args": dict, "gid": <Gemini's own 
 Tools are given as [{"name", "description", "parameters": <JSON schema>}].
 """
 import asyncio
+import os
 import hashlib
 import json
 import logging
@@ -286,7 +287,8 @@ class OpenAICompatibleProvider:
         self.api_key = api_key
         self.model = model
         self.extra_headers = extra_headers or {}
-        self.client = httpx.AsyncClient(timeout=90)
+        is_local = name.lower() == "ollama" or "11434" in url
+        self.client = httpx.AsyncClient(timeout=300 if is_local else 90)
 
     @staticmethod
     def _messages(system: str, messages: list[dict]) -> list[dict]:
@@ -307,8 +309,75 @@ class OpenAICompatibleProvider:
                 out.append({"role": "user", "content": m["content"]})
         return out
 
+    @staticmethod
+    def _flat_messages(system: str, messages: list[dict]) -> list[dict]:
+        """Plain chat messages for calls without tools (tool turns become readable text)."""
+        out = [{"role": "system", "content": system}]
+        for m in messages:
+            if m["role"] == "tool":
+                out.append({"role": "user", "content": f"[نتيجة أداة {m.get('name', '')}]\n{m.get('content', '')}"})
+            elif m["role"] == "assistant":
+                out.append({"role": "assistant", "content": m.get("content") or ""})
+            else:
+                out.append({"role": "user", "content": m["content"]})
+        return out
+
+    async def _ollama_native(self, system: str, messages: list[dict]) -> Reply:
+        """Tool-less Ollama call through the native /api/chat, where `think: false` really works.
+        (The OpenAI-compatible endpoint ignores /no_think and reasoning_effort for Qwen3.)"""
+        import os
+        base = self.url.split("/v1/")[0].rstrip("/")
+        url = f"{base}/api/chat"
+        keep = os.getenv("OLLAMA_KEEP_ALIVE", "-1").strip() or "-1"
+        try:
+            keep_val = int(keep)
+        except ValueError:
+            keep_val = keep
+        payload: dict = {
+            "model": self.model,
+            "messages": self._flat_messages(system, messages),
+            "stream": False,
+            "keep_alive": keep_val,
+            "options": {
+                "num_ctx": int(getattr(config, "OLLAMA_CONTEXT_LENGTH", 8192)),
+                "temperature": float(getattr(config, "LLM_TEMPERATURE", 0.3)),
+                "num_predict": 1024,
+            },
+        }
+        if "qwen3" in self.model.lower():
+            payload["think"] = False
+        try:
+            resp = await self.client.post(url, json=payload)
+            if resp.status_code == 400 and "think" in payload:
+                payload.pop("think")  # model without thinking support
+                resp = await self.client.post(url, json=payload)
+        except Exception as e:
+            log.exception("Ollama native connection problem: %s", e)
+            raise LLMError(NETWORK_MSG)
+        if resp.status_code == 404:
+            raise LLMError(f"اسم موديل Ollama غلط أو غير منزّل ❌ ({self.model})")
+        if resp.status_code >= 400:
+            log.error("Ollama native error %s: %s", resp.status_code, resp.text[:300])
+            raise LLMError(f"صار خطأ من Ollama (رمز {resp.status_code}).")
+        try:
+            data = resp.json()
+            content = (data.get("message") or {}).get("content") or ""
+        except ValueError:
+            raise LLMError(EMPTY_MSG)
+        reply = Reply(text=strip_think_tags(content))
+        reply.usage = {
+            "prompt_tokens": data.get("prompt_eval_count", 0),
+            "completion_tokens": data.get("eval_count", 0),
+            "total_tokens": data.get("prompt_eval_count", 0) + data.get("eval_count", 0),
+        }
+        if not reply.text:
+            raise LLMError(EMPTY_MSG)
+        return reply
+
     async def generate(self, system: str, messages: list[dict], tools: list[dict] | None = None, task_type: str = "general") -> Reply:
         is_ollama = self.name.lower() == "ollama" or "11434" in self.url
+        if is_ollama and not tools:
+            return await self._ollama_native(system, messages)
         is_qwen = "qwen" in self.model.lower() or "deepseek" in self.model.lower()
         enable_thinking = task_type.lower().strip() in ("coding", "analysis", "code", "deep_analysis")
 
@@ -319,13 +388,23 @@ class OpenAICompatibleProvider:
         }
 
         # Control thinking mode for Ollama / Qwen models
+        if is_ollama:
+            opts = payload.setdefault("options", {})
+            opts["num_ctx"] = int(getattr(config, "OLLAMA_CONTEXT_LENGTH", 8192))
+            keep = os.getenv("OLLAMA_KEEP_ALIVE", "-1").strip() or "-1"
+            try:
+                payload["keep_alive"] = int(keep)
+            except ValueError:
+                payload["keep_alive"] = keep
+
         if is_ollama or is_qwen:
             if not enable_thinking:
                 # Disable thinking for normal/routine requests
                 payload["reasoning_effort"] = "none"
                 if "/no_think" not in sys_prompt:
                     sys_prompt = f"{sys_prompt}\n/no_think"
-                payload["options"] = {"thinking": False}
+                opts = payload.setdefault("options", {})
+                opts["thinking"] = False
             else:
                 # Enable thinking only for coding and deep analysis
                 payload["reasoning_effort"] = "medium"
@@ -424,7 +503,7 @@ class FallbackLLM:
         for name, provider in candidates:
             try:
                 if hasattr(provider, "generate") and "task_type" in inspect.signature(provider.generate).parameters:
-                    reply = await provider.generate(system, messages, tools, task_type=task_type)
+                    reply = await provider.generate(system, messages, tools, task_type="auto")
                 else:
                     reply = await provider.generate(system, messages, tools)
             except LLMError as e:
@@ -449,7 +528,7 @@ class SmartRouter(FallbackLLM):
     PROVIDER_LIMITS = {
         "groq": 8000,
         "cloudflare": 8000,
-        "ollama": 8000,
+        "ollama": int(getattr(config, "OLLAMA_CONTEXT_LENGTH", 8192)) - 1000,
         "mistral": 32000,
         "openrouter": 64000,
         "gemini": 1000000,
@@ -513,8 +592,18 @@ class SmartRouter(FallbackLLM):
             return "analysis"
         return "general"
 
-    def _get_candidates_for_task(self, task_type: str) -> list[tuple[str, object]]:
+    def _get_candidates_for_task(self, task_type: str, has_tools: bool = True) -> list[tuple[str, object]]:
         task = (task_type or "general").lower().strip()
+        # Local-first (opt-in via LOCAL_FIRST=1): only for calls WITHOUT tools (summaries,
+        # plain rewriting). Tool calling stays on cloud models, which are far more reliable at it.
+        if (
+            getattr(config, "LOCAL_FIRST", False)
+            and not has_tools
+            and task in ("summary", "fast", "triage", "general")
+            and "ollama" in self._provider_map
+        ):
+            first = self._provider_map["ollama"]
+            return [first] + [(n, p) for n, p in self.providers if n.lower() != "ollama"]
         if task in ("coding", "network", "code"):
             priority = ["gemini", "mistral", "openrouter", "groq", "ollama"]
         elif task in ("summary", "fast", "triage"):
@@ -548,7 +637,7 @@ class SmartRouter(FallbackLLM):
         else:
             effective_task = task_type.lower().strip()
 
-        candidates_all = self._get_candidates_for_task(effective_task)
+        candidates_all = self._get_candidates_for_task(effective_task, has_tools=bool(tools))
         
         # Filter permanently disabled providers (402 balance / 401 invalid key)
         available = [(n, p) for n, p in candidates_all if n.lower() not in self._disabled_providers]
@@ -568,6 +657,8 @@ class SmartRouter(FallbackLLM):
 
         estimated_tokens = self.estimate_tokens(system, messages, tools)
         last_error = None
+        log.info("[SmartRouter] order=%s local_first=%s tools=%s", [n for n, _ in candidates],
+                 bool(getattr(config, "LOCAL_FIRST", False)), bool(tools))
 
         for name, provider in candidates:
             # Skip provider if estimated tokens exceed its limit
@@ -577,6 +668,7 @@ class SmartRouter(FallbackLLM):
                 continue
 
             for attempt in range(2):
+                _t0 = time.monotonic()
                 try:
                     if hasattr(provider, "generate") and "task_type" in inspect.signature(provider.generate).parameters:
                         reply = await provider.generate(system, messages, tools, task_type=effective_task)
@@ -585,6 +677,8 @@ class SmartRouter(FallbackLLM):
                     self._resting_until.pop(name, None)
                     self._failure_counts.pop(name, None)
                     reply.provider = name
+                    log.info("[SmartRouter] answered by %s in %.1fs (task=%s, tools=%s, est_tokens=%s)",
+                             name, time.monotonic() - _t0, effective_task, bool(tools), estimated_tokens)
                     return reply
 
                 except PayloadTooLargeError as e:

@@ -36,7 +36,7 @@ OPENROUTER_MODEL = _get("OPENROUTER_MODEL", required=False) or "deepseek/deepsee
 # Each one is enabled only when both its key and model are filled in .env.
 BACKUP_KEYS = {
     name: (_get(f"{name.upper()}_API_KEY", required=False), _get(f"{name.upper()}_MODEL", required=False))
-    for name in ("Groq", "Cloudflare", "xKiro", "Cerebras", "Mistral", "OpenRouter", "NVIDIA", "ZAI", "Ollama")
+    for name in ("Groq", "Cloudflare", "Cerebras", "Mistral", "OpenRouter", "NVIDIA", "Ollama")  # xKiro/ZAI removed: unverified third-party endpoints
 }
 
 # Ensure native Ollama and OpenRouter are correctly mapped in BACKUP_KEYS
@@ -81,6 +81,13 @@ if MORNING_BRIEF_TIME != "off":
 
 # ReliefWeb API name (free, must be approved by ReliefWeb). Empty = ReliefWeb not checked.
 RELIEFWEB_APPNAME = _get("RELIEFWEB_APPNAME", required=False)
+
+# Local-first routing (opt-in): Ollama answers tool-less calls (summaries etc.) before cloud providers.
+LOCAL_FIRST = os.getenv("LOCAL_FIRST", "0").strip() == "1"
+try:
+    OLLAMA_CONTEXT_LENGTH = int(os.getenv("OLLAMA_CONTEXT_LENGTH", "8192"))
+except ValueError:
+    OLLAMA_CONTEXT_LENGTH = 8192
 
 # LLM Generation Parameters
 LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0.3"))

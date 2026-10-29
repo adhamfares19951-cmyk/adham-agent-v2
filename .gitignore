@@ -16,7 +16,7 @@ __pycache__/
 
 # Logs, Dumps, and Media Outputs
 watchdog.log
-bot.log
+bot.log*
 crash_dumps/
 screenshots/
 audio_output/
@@ -54,3 +54,9 @@ _backup_pre_hardening/
 # Security & temporary exclusions
 agent_memory.db*
 *.bundle
+
+# generated media / publishing state
+clips_inbox/
+clips_ready/
+tiktok_uploads.json
+tool_audit_report.md

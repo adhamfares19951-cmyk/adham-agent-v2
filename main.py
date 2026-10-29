@@ -5,6 +5,7 @@ import io
 import asyncio
 import json
 import logging
+from logging.handlers import RotatingFileHandler
 import os
 import sys
 import atexit
@@ -39,7 +40,7 @@ logging.basicConfig(
     level=logging.INFO,
     handlers=[
         logging.StreamHandler(),
-        logging.FileHandler(Path(__file__).resolve().parent / "bot.log", encoding="utf-8"),
+        RotatingFileHandler(Path(__file__).resolve().parent / "bot.log", maxBytes=5 * 1024 * 1024, backupCount=3, encoding="utf-8"),
     ],
 )
 logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -140,17 +141,24 @@ async def _answer(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str,
 
     await send_long(update, answer)
 
-    # Check if an action was gated into approval queue (#123) and offer quick action buttons
-    m_appr = re.search(r'طابور الموافقات \(#(\d+)\)', answer)
-    if m_appr:
-        qid = int(m_appr.group(1))
+    # Offer approval buttons for every action gated during this reply (independent of the LLM wording)
+    new_items = brain.get_new_approvals()
+    if not new_items:
+        m_appr = re.search(r'طابور الموافقات \(#(\d+)\)', answer)
+        new_items = [{"id": int(m_appr.group(1)), "action_type": "?", "payload": ""}] if m_appr else []
+    for item in new_items:
+        qid = int(item["id"])
         markup = InlineKeyboardMarkup([
             [
                 InlineKeyboardButton(f"✅ اعتماد #{qid}", callback_data=f"panel:appr:ok:{qid}"),
                 InlineKeyboardButton(f"❌ رفض #{qid}", callback_data=f"panel:appr:no:{qid}"),
             ]
         ])
-        await msg.reply_text(f"اضغط أدناه للاعتماد أو الرفض للإجراء #{qid}:", reply_markup=markup)
+        details = str(item.get("payload") or "")[:600]
+        await msg.reply_text(
+            f"⚠️ طلب موافقة #{qid}\nالأداة: {item.get('action_type')}\nالمعطيات: {details}\n\nاضغط للاعتماد أو الرفض:",
+            reply_markup=markup,
+        )
 
     # ZERO-HALLUCINATION ATTACHMENT DISPATCHER:
     # Attach CV ONLY when user explicitly asks for CV/سيرة
@@ -568,6 +576,23 @@ async def post_init(app: Application) -> None:
     jobs.setup(app)
     brief.setup(app)
     gmail_tools.setup(app)
+
+    # Automated daily memory database backup (ACID snapshot, keeps 7 latest copies)
+    async def _scheduled_backup(context: ContextTypes.DEFAULT_TYPE) -> None:
+        try:
+            bpath = memory.backup_database()
+            log.info("Automated memory database backup completed: %s", bpath.name)
+        except Exception as err:
+            log.error("Failed automated database backup: %s", err)
+
+    if app.job_queue:
+        import datetime as _dt
+        app.job_queue.run_daily(_scheduled_backup, time=_dt.time(hour=3, minute=0), name="daily_db_backup")
+        try:
+            init_b = memory.backup_database()
+            log.info("Startup memory database backup verified: %s", init_b.name)
+        except Exception as err:
+            log.warning("Startup database backup warning: %s", err)
 
 
 async def hunt_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
