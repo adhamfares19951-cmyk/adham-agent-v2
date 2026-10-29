@@ -47,3 +47,10 @@ bot.lock
 workspace_data/media/
 dist_pages/
 tiktok_table_dump.txt
+
+# hardening backups
+_backup_pre_hardening/
+
+# Security & temporary exclusions
+agent_memory.db*
+*.bundle
