@@ -70,6 +70,7 @@ async def _telegram_items(channel: str) -> list[Item]:
     resp = await client.get(f"https://t.me/s/{channel}")
     resp.raise_for_status()
     items = []
+    resp_text = resp.text
     for block in resp_text.split('class="tgme_widget_message_wrap')[1:]:
         post = re.search(r'data-post="([^"]+)"', block)
         body = re.search(r'<div class="tgme_widget_message_text[^>]*>(.*?)</div>', block, re.S)
@@ -98,7 +99,7 @@ async def _website_items(name: str, url: str, pattern: str, details: bool) -> li
     try:
         resp = await client.get(url, headers=headers)
         resp.raise_for_status()
-        resp_text = resp_text
+        resp_text = resp.text
     except Exception as e:
         status_code = getattr(getattr(e, "response", None), "status_code", None)
         if status_code == 403:

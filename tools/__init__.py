@@ -166,13 +166,18 @@ def schemas() -> list[dict]:
     ]
 
 
-async def run(name: str, args: dict | None = None) -> str:
+async def run(name: str, args: dict | None = None, *, approved: bool = False) -> str:
     """Executes a tool with validation, timeouts, truncation, and safety approval gates."""
     tool = _TOOLS.get(name)
     if not tool:
         return f"خطأ: الأداة '{name}' غير مسجلة في النظام."
 
     if args is None:
+        args = {}
+    elif isinstance(args, dict):
+        # Strip any key starting with '_' from args before schema validation
+        args = {k: v for k, v in args.items() if not k.startswith("_")}
+    else:
         args = {}
 
     # Wave 1.2: jsonschema validation
@@ -185,15 +190,15 @@ async def run(name: str, args: dict | None = None) -> str:
         log.warning("JSON schema validation failed for %s args=%s: %s", name, args, ve)
         return f"خطأ في معطيات الأداة {name}: {ve}. يرجى تصحيح المعطيات وفق المخطط وإعادة المحاولة."
 
-    # Wave 1.2 & Rule 14: Safety Approval Gate for Dangerous Tools
-    if name in DANGEROUS_TOOLS and not args.get("_approved"):
-        # Check Shell Denylist first
-        if name == "execute_server_command":
-            cmd = str(args.get("command", "")).lower()
-            if any(deny in cmd for deny in SHELL_DENYLIST):
-                log.error("Rejected denied shell command: %s", cmd)
-                return f"⛔ تم رفض تنفيذ الأمر لاحتوائه على تعليمة محظورة أمنياً: {cmd}"
+    # Shell Denylist ALWAYS runs (even if approved=True)
+    if name == "execute_server_command":
+        cmd = str(args.get("command", "")).lower()
+        if any(deny in cmd for deny in SHELL_DENYLIST):
+            log.error("Rejected denied shell command: %s", cmd)
+            return f"⛔ تم رفض تنفيذ الأمر لاحتوائه على تعليمة محظورة أمنياً: {cmd}"
 
+    # Dangerous tools approval gate
+    if name in DANGEROUS_TOOLS and not approved:
         log.warning("Gating dangerous tool %s into approval queue. Args: %s", name, args)
         qid = memory.add_approval_item(
             action_type=name,
@@ -251,4 +256,5 @@ def validate_tools_schemas() -> dict[str, Any]:
 
 
 # Backward-compatible alias
-execute_tool = run
+async def execute_tool(name: str, args: dict | None = None, *, approved: bool = False) -> str:
+    return await run(name, args, approved=approved)

@@ -624,6 +624,28 @@ def update_approval_status(item_id: int, status: str) -> bool:
         ).rowcount > 0
 
 
+def claim_approval_for_execution(item_id: int) -> sqlite3.Row | None:
+    """Atomically marks a pending approval as 'approved' so it can only be executed once."""
+    with _db() as c:
+        row = c.execute("SELECT * FROM approval_queue WHERE id = ? AND status = 'pending'", (item_id,)).fetchone()
+        if not row:
+            return None
+        c.execute(
+            "UPDATE approval_queue SET status = 'approved', resolved_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'pending'",
+            (item_id,)
+        )
+        return row
+
+
+def reject_approval_item(item_id: int) -> bool:
+    """Atomically marks a pending approval as 'rejected'."""
+    with _db() as c:
+        return c.execute(
+            "UPDATE approval_queue SET status = 'rejected', resolved_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'pending'",
+            (item_id,)
+        ).rowcount > 0
+
+
 def list_recent_approvals(limit: int = 10) -> list[sqlite3.Row]:
     """Lists the latest approvals for auditing."""
     with _db() as c:

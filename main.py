@@ -140,6 +140,18 @@ async def _answer(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str,
 
     await send_long(update, answer)
 
+    # Check if an action was gated into approval queue (#123) and offer quick action buttons
+    m_appr = re.search(r'طابور الموافقات \(#(\d+)\)', answer)
+    if m_appr:
+        qid = int(m_appr.group(1))
+        markup = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton(f"✅ اعتماد #{qid}", callback_data=f"panel:appr:ok:{qid}"),
+                InlineKeyboardButton(f"❌ رفض #{qid}", callback_data=f"panel:appr:no:{qid}"),
+            ]
+        ])
+        await msg.reply_text(f"اضغط أدناه للاعتماد أو الرفض للإجراء #{qid}:", reply_markup=markup)
+
     # ZERO-HALLUCINATION ATTACHMENT DISPATCHER:
     # Attach CV ONLY when user explicitly asks for CV/سيرة
     latin_words_ans = set(re.findall(r'[a-z0-9_]+', text.lower()))
@@ -781,25 +793,78 @@ async def handle_panel_callback(update: Update, context: ContextTypes.DEFAULT_TY
         await safe_edit_message_text(query, "\n".join(lines), reply_markup=markup, parse_mode="Markdown")
         return
 
-    # 5. Approve Action
-    if data.startswith("panel:appr:ok:"):
+    # 5. Approve Action (Single execution gate)
+    if data.startswith("panel:appr:ok:") or data.startswith("appr:ok:"):
         item_id = int(data.split(":")[-1])
-        memory.update_approval_status(item_id, "approved")
-        text = f"✅ **تمت الموافقة بنجاح على الإجراء رقم #{item_id}!**\nسيقوم النظام بتنفيذ المهمة فوراً وفق الصلاحيات الممنوحة."
+        item = memory.get_approval_item(item_id)
+        if not item:
+            await safe_edit_message_text(query, f"❌ الإجراء رقم #{item_id} غير موجود في طابور الموافقات.")
+            return
+
+        claimed = memory.claim_approval_for_execution(item_id)
+        if not claimed:
+            curr_status = item["status"] if item and "status" in item.keys() else "unknown"
+            status_ar = {
+                "executed": "تم تنفيذه بالفعل سابقاً",
+                "approved": "تم اعتماده مسبقاً وجارٍ تنفيذه",
+                "rejected": "تم رفضه سابقاً",
+            }.get(curr_status, curr_status)
+            await safe_edit_message_text(query, f"ℹ️ الإجراء رقم #{item_id} تمت معالجته مسبقاً ({status_ar}). لا يمكن تنفيذه مرة أخرى.")
+            return
+
+        action_type = item["action_type"]
+        payload_raw = item["payload"]
+        if isinstance(payload_raw, str):
+            try:
+                args = json.loads(payload_raw)
+            except Exception:
+                args = {}
+        elif isinstance(payload_raw, dict):
+            args = payload_raw
+        else:
+            args = {}
+
+        try:
+            import tools
+            exec_result = await tools.run(action_type, args, approved=True)
+            memory.update_approval_status(item_id, "executed")
+            result_text = (
+                f"✅ **تم اعتماد وتنفيذ الإجراء رقم #{item_id} بنجاح!**\n\n"
+                f"• **الأداة:** `{action_type}`\n"
+                f"• **النتيجة بالعربي:**\n{exec_result}"
+            )
+        except Exception as e:
+            log.exception("Error executing approved action #%s (%s): %s", item_id, action_type, e)
+            result_text = (
+                f"❌ **حدث خطأ أثناء تنفيذ الإجراء المعتمد #{item_id}:**\n\n"
+                f"• **الأداة:** `{action_type}`\n"
+                f"• **تفاصيل الخطأ:** {e}"
+            )
+
         markup = InlineKeyboardMarkup([
-            [InlineKeyboardButton("📋 العودة لطابور الموافقات", callback_data="panel:approvals")],
+            [InlineKeyboardButton("📋 طابور الموافقات", callback_data="panel:approvals")],
             [InlineKeyboardButton("🔙 اللوحة الرئيسية", callback_data="panel:main")],
         ])
-        await safe_edit_message_text(query, text, reply_markup=markup, parse_mode="Markdown")
+        await safe_edit_message_text(query, result_text, reply_markup=markup, parse_mode="Markdown")
         return
 
     # 6. Reject Action
-    if data.startswith("panel:appr:no:"):
+    if data.startswith("panel:appr:no:") or data.startswith("appr:no:"):
         item_id = int(data.split(":")[-1])
-        memory.update_approval_status(item_id, "rejected")
-        text = f"❌ **تم رفض الإجراء رقم #{item_id} وإلغاء تنفيذه.**"
+        item = memory.get_approval_item(item_id)
+        if not item:
+            await safe_edit_message_text(query, f"❌ الإجراء رقم #{item_id} غير موجود في طابور الموافقات.")
+            return
+
+        rejected = memory.reject_approval_item(item_id)
+        if not rejected:
+            curr_status = item["status"] if item and "status" in item.keys() else "unknown"
+            await safe_edit_message_text(query, f"ℹ️ الإجراء رقم #{item_id} تمت معالجته مسبقاً ({curr_status}).")
+            return
+
+        text = f"❌ **تم رفض الإجراء رقم #{item_id} وإلغاء تنفيذه نهائياً وتسجيل ذلك.**"
         markup = InlineKeyboardMarkup([
-            [InlineKeyboardButton("📋 العودة لطابور الموافقات", callback_data="panel:approvals")],
+            [InlineKeyboardButton("📋 طابور الموافقات", callback_data="panel:approvals")],
             [InlineKeyboardButton("🔙 اللوحة الرئيسية", callback_data="panel:main")],
         ])
         await safe_edit_message_text(query, text, reply_markup=markup, parse_mode="Markdown")
@@ -2907,7 +2972,7 @@ def main() -> None:
     app.add_handler(CallbackQueryHandler(reminders.handle_callback, pattern="^rem:"))
     app.add_handler(CallbackQueryHandler(jobs.handle_callback, pattern="^job:"))
     app.add_handler(CallbackQueryHandler(gmail_tools.handle_callback, pattern="^mail:"))
-    app.add_handler(CallbackQueryHandler(handle_panel_callback, pattern="^panel:"))
+    app.add_handler(CallbackQueryHandler(handle_panel_callback, pattern="^(panel:|appr:)"))
     app.add_handler(CallbackQueryHandler(handle_social_callback, pattern="^social:"))
 
     app.add_handler(MessageHandler(owner & filters.TEXT & ~filters.COMMAND, handle_text))
