@@ -14,6 +14,8 @@ import json
 import logging
 import time
 import uuid
+import re
+import inspect
 from dataclasses import dataclass, field
 
 import config
@@ -64,6 +66,17 @@ class Reply:
     tool_calls: list[dict] = field(default_factory=list)
     raw_gemini: object = None  # Gemini's own content, re-sent as-is (keeps thought signatures)
     provider: str = ""
+    usage: dict[str, int] = field(default_factory=dict)
+
+
+def strip_think_tags(text: str) -> str:
+    """Removes <think>...</think> blocks, unclosed <think> tags, and orphaned </think> markers."""
+    if not text or not isinstance(text, str):
+        return ""
+    cleaned = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL)
+    cleaned = re.sub(r'<think>.*', '', cleaned, flags=re.DOTALL)
+    cleaned = cleaned.replace('</think>', '')
+    return cleaned.strip()
 
 
 def _new_id() -> str:
@@ -168,6 +181,7 @@ class GeminiProvider:
                 })
             elif p.text and not p.thought:
                 reply.text += p.text
+        reply.text = strip_think_tags(reply.text)
         if not reply.text and not reply.tool_calls:
             raise LLMError(EMPTY_MSG)
         return reply
@@ -293,9 +307,30 @@ class OpenAICompatibleProvider:
                 out.append({"role": "user", "content": m["content"]})
         return out
 
-    async def generate(self, system: str, messages: list[dict], tools: list[dict] | None = None) -> Reply:
-        # max_tokens: some providers (Cloudflare) default to a tiny limit and return empty answers.
-        payload = {"model": self.model, "messages": self._messages(system, messages), "max_tokens": 4096}
+    async def generate(self, system: str, messages: list[dict], tools: list[dict] | None = None, task_type: str = "general") -> Reply:
+        is_ollama = self.name.lower() == "ollama" or "11434" in self.url
+        is_qwen = "qwen" in self.model.lower() or "deepseek" in self.model.lower()
+        enable_thinking = task_type.lower().strip() in ("coding", "analysis", "code", "deep_analysis")
+
+        sys_prompt = system
+        payload: dict[str, Any] = {
+            "model": self.model,
+            "max_tokens": 4096,
+        }
+
+        # Control thinking mode for Ollama / Qwen models
+        if is_ollama or is_qwen:
+            if not enable_thinking:
+                # Disable thinking for normal/routine requests
+                payload["reasoning_effort"] = "none"
+                if "/no_think" not in sys_prompt:
+                    sys_prompt = f"{sys_prompt}\n/no_think"
+                payload["options"] = {"thinking": False}
+            else:
+                # Enable thinking only for coding and deep analysis
+                payload["reasoning_effort"] = "medium"
+
+        payload["messages"] = self._messages(sys_prompt, messages)
         if tools:
             payload["tools"] = [{"type": "function", "function": {
                 "name": t["name"], "description": t["description"], "parameters": t["parameters"]}}
@@ -322,10 +357,23 @@ class OpenAICompatibleProvider:
             raise LLMError(f"صار خطأ من {self.name} (رمز {resp.status_code}). جرّب كمان مرة.")
 
         try:
-            msg = resp.json()["choices"][0]["message"]
+            resp_json = resp.json()
+            msg = resp_json["choices"][0]["message"]
         except (KeyError, IndexError, ValueError, TypeError):
             raise LLMError(EMPTY_MSG)
-        reply = Reply(text=msg.get("content") or "")
+
+        raw_content = msg.get("content") or ""
+        clean_content = strip_think_tags(raw_content)
+        reply = Reply(text=clean_content)
+
+        usage_info = resp_json.get("usage", {})
+        if isinstance(usage_info, dict):
+            reply.usage = {
+                "prompt_tokens": usage_info.get("prompt_tokens", 0),
+                "completion_tokens": usage_info.get("completion_tokens", 0),
+                "total_tokens": usage_info.get("total_tokens", 0),
+            }
+
         for tc in msg.get("tool_calls") or []:
             fn = tc.get("function", {})
             try:
@@ -375,7 +423,10 @@ class FallbackLLM:
         last_error = None
         for name, provider in candidates:
             try:
-                reply = await provider.generate(system, messages, tools)
+                if hasattr(provider, "generate") and "task_type" in inspect.signature(provider.generate).parameters:
+                    reply = await provider.generate(system, messages, tools, task_type=task_type)
+                else:
+                    reply = await provider.generate(system, messages, tools)
             except LLMError as e:
                 log.warning("%s failed (%s), trying next provider", name, e.user_message)
                 self._resting_until[name] = time.monotonic() + self.COOLDOWN
@@ -446,10 +497,20 @@ class SmartRouter(FallbackLLM):
         summary_latin = {"summarize", "summary", "brief", "digest", "triage", "tldr"}
         summary_arabic = {"تلخيص", "ملخص", "لخص", "اختصر", "اختصار", "موجز"}
 
+        analysis_latin = {
+            "analysis", "analyze", "deep", "audit", "architecture", "strategy",
+            "investigate", "compare", "benchmark", "research", "forensics"
+        }
+        analysis_arabic = {
+            "تحليل", "حلل", "دراسة", "مقارنة", "فحص_عميق", "استراتيجية", "تدقيق", "تفصيل", "جنائي"
+        }
+
         if (latin_tokens & summary_latin) or (arabic_tokens & summary_arabic):
             return "summary"
         if (latin_tokens & coding_latin) or (arabic_tokens & coding_arabic):
             return "coding"
+        if (latin_tokens & analysis_latin) or (arabic_tokens & analysis_arabic):
+            return "analysis"
         return "general"
 
     def _get_candidates_for_task(self, task_type: str) -> list[tuple[str, object]]:
@@ -517,7 +578,10 @@ class SmartRouter(FallbackLLM):
 
             for attempt in range(2):
                 try:
-                    reply = await provider.generate(system, messages, tools)
+                    if hasattr(provider, "generate") and "task_type" in inspect.signature(provider.generate).parameters:
+                        reply = await provider.generate(system, messages, tools, task_type=effective_task)
+                    else:
+                        reply = await provider.generate(system, messages, tools)
                     self._resting_until.pop(name, None)
                     self._failure_counts.pop(name, None)
                     reply.provider = name
@@ -615,8 +679,14 @@ def get_smart_router() -> SmartRouter:
     return get_llm()
 
 
-async def generate(system: str, messages: list[dict], tools: list[dict] | None = None, task_type: str = "auto") -> Reply:
+async def generate(
+    system: str,
+    messages: list[dict],
+    tools: list[dict] | None = None,
+    task_type: str = "auto",
+    pinned_provider: str | None = None,
+) -> Reply:
     """Module-level generation entry point."""
     router = get_smart_router()
-    return await router.generate(system, messages, tools, task_type=task_type)
+    return await router.generate(system, messages, tools, task_type=task_type, pinned_provider=pinned_provider)
 

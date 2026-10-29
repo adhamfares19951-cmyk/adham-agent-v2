@@ -158,7 +158,7 @@ async def reply(text: str, *, use_history: bool = True, save: bool = True) -> st
         memory.add_usage("llm_call")
 
         if not r.tool_calls:
-            answer = r.text.strip()
+            answer = strip_think_tags(r.text.strip())
             break
 
         msgs.append({
@@ -198,12 +198,12 @@ async def reply(text: str, *, use_history: bool = True, save: bool = True) -> st
                 "content": "لخص أفضل إجابة ممكنة وقدم النتيجة النهائية لأدهم بالاعتماد على كافة المعلومات والنتائج التي جمعتها حتى الآن."
             }]
             final_r = await llm.generate(system, summary_msgs, tools=None, pinned_provider=pinned_provider)
-            answer = final_r.text.strip()
+            answer = strip_think_tags(final_r.text.strip())
         except Exception as e:
             log.exception("Final summarization failed after MAX_STEPS: %s", e)
             answer = "يا أدهم، قمت بعدة خطوات لجمع البيانات المطلوبة، وهذه خلاصة ما استطعت الوصول إليه حتى الآن. إذا بدك تفصيل إضافي بنقدر نكمله برسالة ثانية."
 
-    answer = answer.strip()
+    answer = strip_think_tags(answer.strip())
 
     # Wave 1.3: Count message in usage ONLY after a successful reply
     memory.add_usage("message")
